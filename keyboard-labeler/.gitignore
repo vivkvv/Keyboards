@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.conda/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Model weights and caches
+checkpoints/
+*.pt
+*.pth
+*.onnx
+*.pdparams
+*.pdiparams
+.EasyOCR/
+.paddlex/
+.cache/
+
+# Generated outputs
+*.json
+effects/
+debug_ocr_pipeline/
+debug_paddleocr/
+
+# Images generated during experiments
+images/
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db

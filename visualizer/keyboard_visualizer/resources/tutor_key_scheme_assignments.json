@@ -1,0 +1,76 @@
+{
+  "schemes": {
+    "0": "left_standard",
+    "1": "left_standard",
+    "2": "left_standard",
+    "3": "left_standard",
+    "4": "left_standard",
+    "5": "left_standard",
+    "6": "left_standard",
+    "7": "left_standard",
+    "8": "left_standard",
+    "9": "left_standard",
+    "10": "left_standard",
+    "11": "left_standard",
+    "12": "left_standard",
+    "13": "left_standard",
+    "14": "left_standard",
+    "15": "left_standard",
+    "17": "left_standard",
+    "18": "left_standard",
+    "20": "right_right_right",
+    "21": "right_right_right",
+    "22": "right_right_right",
+    "23": "right_left_left",
+    "24": "right_left_left",
+    "25": "right_right_right",
+    "26": "right_right_right",
+    "27": "right_left_left",
+    "28": "right_left_left",
+    "29": "right_left_left",
+    "30": "right_right_right",
+    "31": "right_right_right",
+    "32": "right_left_left",
+    "33": "right_left_left",
+    "34": "right_left_left",
+    "35": "right_left_left",
+    "37": "right_right_right"
+  },
+  "overrides": {
+    "20": {
+      "RIGHT_RING": 21
+    },
+    "21": {
+      "RIGHT_PINKY": 20
+    },
+    "22": {
+      "RIGHT_PINKY": 26
+    },
+    "23": {
+      "RIGHT_PINKY": 27
+    },
+    "24": {
+      "RIGHT_PINKY": 28
+    },
+    "27": {
+      "RIGHT_PINKY": 31,
+      "RIGHT_RING": 27
+    },
+    "29": {
+      "RIGHT_PINKY": 33
+    },
+    "30": {
+      "RIGHT_RING": 31
+    },
+    "31": {
+      "RIGHT_PINKY": 30
+    },
+    "33": {
+      "RIGHT_PINKY": 33,
+      "RIGHT_RING": 29
+    },
+    "34": {
+      "RIGHT_PINKY": -1
+    }
+  }
+}

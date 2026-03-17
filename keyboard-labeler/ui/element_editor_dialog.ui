@@ -1,0 +1,488 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ElementEditorDialogRoot</class>
+ <widget class="QWidget" name="element_editor_root">
+  <layout class="QHBoxLayout" name="root_layout">
+   <item>
+    <widget class="QSplitter" name="main_splitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QWidget" name="left_panel">
+      <layout class="QVBoxLayout" name="left_layout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QWidget" name="image_container"/>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="recognition_group">
+         <property name="title">
+          <string>Recognition</string>
+         </property>
+         <layout class="QGridLayout" name="recognition_layout">
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="chk_rec_ocr_new">
+            <property name="text">
+             <string>OCR New</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QCheckBox" name="chk_rec_legacy">
+            <property name="text">
+             <string>EasyOCR Legacy</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QCheckBox" name="chk_rec_trocr">
+            <property name="text">
+             <string>TrOCR</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QCheckBox" name="chk_rec_shapes">
+            <property name="text">
+             <string>Detect Icon/Divider</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0" colspan="2">
+           <widget class="QPushButton" name="btn_run_recognition">
+            <property name="text">
+             <string>Run Recognition</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="recognition_status">
+         <property name="text">
+          <string>Recognition status: idle</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="right_panel">
+      <layout class="QVBoxLayout" name="right_layout">
+       <item>
+        <layout class="QHBoxLayout" name="name_layout">
+         <item>
+          <widget class="QLabel" name="name_label">
+           <property name="text">
+            <string>Key Name:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="name_edit"/>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="methods_group">
+         <property name="title">
+          <string>Recognized By Method</string>
+         </property>
+         <layout class="QHBoxLayout" name="methods_layout">
+          <item>
+           <layout class="QVBoxLayout" name="col_new">
+            <item>
+             <widget class="QLabel" name="lbl_new">
+              <property name="text">
+               <string>OCR New</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignHCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QListWidget" name="list_m_new"/>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="col_legacy">
+            <item>
+             <widget class="QLabel" name="lbl_legacy">
+              <property name="text">
+               <string>OCR Legacy</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignHCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QListWidget" name="list_m_legacy"/>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="col_trocr">
+            <item>
+             <widget class="QLabel" name="lbl_trocr">
+              <property name="text">
+               <string>TrOCR</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignHCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QListWidget" name="list_m_trocr"/>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="col_shapes">
+            <item>
+             <widget class="QLabel" name="lbl_shapes">
+              <property name="text">
+               <string>Icon/Divider</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignHCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QListWidget" name="list_m_shapes"/>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="list_group">
+         <property name="title">
+          <string>Elements</string>
+         </property>
+         <layout class="QVBoxLayout" name="list_layout">
+          <item>
+           <layout class="QHBoxLayout" name="list_content">
+            <item>
+             <layout class="QVBoxLayout" name="list_btns">
+              <item>
+               <widget class="QPushButton" name="btn_add">
+                <property name="text">
+                 <string>Add</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_delete">
+                <property name="text">
+                 <string>Delete</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="list_btn_spacer">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QListWidget" name="element_list"/>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="props_group">
+         <property name="title">
+          <string>Element Properties</string>
+         </property>
+         <layout class="QHBoxLayout" name="props_root_layout">
+          <item>
+           <widget class="QWidget" name="props_left_widget">
+            <layout class="QFormLayout" name="props_left_form">
+             <item row="0" column="0">
+              <widget class="QLabel" name="lbl_type">
+               <property name="text">
+                <string>Type:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="type_combo"/>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="lbl_content">
+               <property name="text">
+                <string>Content:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QWidget" name="content_widget">
+               <layout class="QHBoxLayout" name="content_layout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QLineEdit" name="content_edit"/>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btn_browse_icon">
+                  <property name="text">
+                   <string>...</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="lbl_divider">
+               <property name="text">
+                <string>Divider:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QComboBox" name="divider_orientation"/>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="lbl_text_angle">
+               <property name="text">
+                <string>Text Angle:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QDoubleSpinBox" name="text_angle"/>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="props_right_widget">
+            <layout class="QFormLayout" name="props_right_form">
+             <item row="0" column="0">
+              <widget class="QLabel" name="lbl_bbox">
+               <property name="text">
+                <string>BBox:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QWidget" name="bbox_widget">
+               <layout class="QHBoxLayout" name="bbox_layout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QLabel" name="lbl_bbox_x">
+                  <property name="text">
+                   <string>X:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QDoubleSpinBox" name="bbox_x"/>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_bbox_y">
+                  <property name="text">
+                   <string>Y:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QDoubleSpinBox" name="bbox_y"/>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_bbox_w">
+                  <property name="text">
+                   <string>W:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QDoubleSpinBox" name="bbox_w"/>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_bbox_h">
+                  <property name="text">
+                   <string>H:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QDoubleSpinBox" name="bbox_h"/>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="lbl_thickness">
+               <property name="text">
+                <string>Thickness:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QDoubleSpinBox" name="divider_thickness"/>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="lbl_text_shift">
+               <property name="text">
+                <string>Text Shift:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QWidget" name="text_tf_widget">
+               <layout class="QHBoxLayout" name="text_tf_layout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QLabel" name="lbl_dx">
+                  <property name="text">
+                   <string>dX:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QDoubleSpinBox" name="text_offset_x"/>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_dy">
+                  <property name="text">
+                   <string>dY:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QDoubleSpinBox" name="text_offset_y"/>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="lbl_text_size">
+               <property name="text">
+                <string>Text Size:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QDoubleSpinBox" name="text_size_rel_key"/>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="right_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="btn_layout">
+         <item>
+          <widget class="QPushButton" name="btn_ok">
+           <property name="text">
+            <string>OK</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_cancel">
+           <property name="text">
+            <string>Cancel</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

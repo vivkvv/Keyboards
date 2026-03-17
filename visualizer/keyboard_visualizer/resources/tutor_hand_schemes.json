@@ -1,0 +1,53 @@
+{
+  "default_left_scheme": "left_standard",
+  "default_right_scheme": "right_left_left",
+  "schemes": {
+    "left_standard": {
+      "label": "Left Standard",
+      "hand": "left",
+      "home_positions": {
+        "LEFT_PINKY": 5,
+        "LEFT_RING": 6,
+        "LEFT_MIDDLE": 7,
+        "LEFT_INDEX": 8,
+        "LEFT_THUMB": 17
+      }
+    },
+    "right_left_left": {
+      "label": "Left-Left",
+      "hand": "right",
+      "home_positions": {
+        "RIGHT_THUMB": 35,
+        "RIGHT_RING": 28,
+        "RIGHT_PINKY": 32
+      }
+    },
+    "right_left_right": {
+      "label": "Left-Right",
+      "hand": "right",
+      "home_positions": {
+        "RIGHT_THUMB": 35,
+        "RIGHT_RING": 27,
+        "RIGHT_PINKY": 31
+      }
+    },
+    "right_right_left": {
+      "label": "Right-Left",
+      "hand": "right",
+      "home_positions": {
+        "RIGHT_THUMB": 37,
+        "RIGHT_RING": 27,
+        "RIGHT_PINKY": 31
+      }
+    },
+    "right_right_right": {
+      "label": "Right-Right",
+      "hand": "right",
+      "home_positions": {
+        "RIGHT_THUMB": 37,
+        "RIGHT_RING": 26,
+        "RIGHT_PINKY": 25
+      }
+    }
+  }
+}

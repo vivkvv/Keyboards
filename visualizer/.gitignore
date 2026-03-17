@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+config.ini
+*.log
+
+.vscode/
+.idea/
+
+field_sim/__pycache__/
+keyboard_visualizer/__pycache__/
+keyboard_visualizer/resources/__pycache__/
+data/tutor_stats.db

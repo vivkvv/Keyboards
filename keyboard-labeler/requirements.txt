@@ -1,0 +1,14 @@
+--index-url https://download.pytorch.org/whl/cu124
+
+torch
+torchvision
+numpy==2.2.6
+scipy==1.15.3
+opencv-python==4.13.0.92
+scikit-image==0.25.2
+pillow==12.0.0
+easyocr==1.7.2
+transformers
+sentencepiece
+segment-anything==1.0
+PySide6==6.10.2

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindowCentral</class>
+ <widget class="QWidget" name="main_window_central">
+  <layout class="QHBoxLayout" name="main_layout">
+   <item>
+    <widget class="QSplitter" name="main_splitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QWidget" name="left_panel">
+      <layout class="QVBoxLayout" name="left_layout">
+       <item>
+        <widget class="QGroupBox" name="list_group">
+         <property name="title"><string>Key Candidates</string></property>
+         <layout class="QVBoxLayout" name="list_group_layout">
+          <item>
+           <widget class="QListWidget" name="key_list">
+            <property name="selectionMode"><enum>QAbstractItemView::ExtendedSelection</enum></property>
+           </widget>
+          </item>
+          <item><widget class="QLabel" name="stats_label"><property name="text"><string>No image loaded</string></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="controls_layout">
+         <item>
+          <layout class="QVBoxLayout" name="controls_left_layout">
+           <item>
+            <widget class="QGroupBox" name="image_group">
+             <property name="title"><string>Image</string></property>
+             <layout class="QVBoxLayout" name="image_group_layout">
+              <item><widget class="QPushButton" name="btn_load"><property name="text"><string>Load Image</string></property></widget></item>
+              <item><widget class="QPushButton" name="btn_segment"><property name="enabled"><bool>false</bool></property><property name="text"><string>Auto Segment</string></property></widget></item>
+              <item><widget class="QPushButton" name="btn_load_seg"><property name="enabled"><bool>false</bool></property><property name="text"><string>Load Segmentation</string></property></widget></item>
+              <item><widget class="QPushButton" name="btn_save_seg"><property name="enabled"><bool>false</bool></property><property name="text"><string>Save Segmentation</string></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="selection_group">
+             <property name="title"><string>Selection</string></property>
+             <layout class="QVBoxLayout" name="selection_group_layout">
+              <item><widget class="QPushButton" name="btn_approve"><property name="enabled"><bool>false</bool></property><property name="text"><string>Approve Selected</string></property></widget></item>
+              <item><widget class="QPushButton" name="btn_merge"><property name="enabled"><bool>false</bool></property><property name="text"><string>Merge Selected</string></property></widget></item>
+              <item><widget class="QPushButton" name="btn_delete"><property name="enabled"><bool>false</bool></property><property name="text"><string>Delete Selected</string></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="recognition_group">
+             <property name="title"><string>Recognition</string></property>
+             <layout class="QVBoxLayout" name="recognition_group_layout">
+              <item><widget class="QCheckBox" name="chk_rec_new"><property name="text"><string>OCR New (polygon+angle)</string></property><property name="checked"><bool>true</bool></property></widget></item>
+              <item><widget class="QCheckBox" name="chk_rec_legacy"><property name="text"><string>OCR Legacy (bbox)</string></property><property name="checked"><bool>true</bool></property></widget></item>
+              <item><widget class="QCheckBox" name="chk_rec_trocr"><property name="text"><string>TrOCR (single char)</string></property><property name="checked"><bool>true</bool></property></widget></item>
+              <item><widget class="QCheckBox" name="chk_rec_shapes"><property name="text"><string>Detect Icon/Divider</string></property><property name="checked"><bool>true</bool></property></widget></item>
+              <item><widget class="QPushButton" name="btn_recognize"><property name="enabled"><bool>false</bool></property><property name="text"><string>Run Recognition</string></property></widget></item>
+              <item><widget class="QPushButton" name="btn_edit_elements"><property name="enabled"><bool>false</bool></property><property name="text"><string>Edit Elements</string></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+           <item><spacer name="controls_left_spacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="controls_right_layout">
+           <item>
+            <widget class="QGroupBox" name="project_json_group">
+             <property name="title"><string>Recognition JSON</string></property>
+             <layout class="QVBoxLayout" name="project_json_group_layout">
+              <item><widget class="QPushButton" name="btn_load_json"><property name="enabled"><bool>true</bool></property><property name="text"><string>Load</string></property></widget></item>
+              <item><widget class="QPushButton" name="btn_save"><property name="enabled"><bool>false</bool></property><property name="text"><string>Save</string></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="display_group">
+             <property name="title"><string>Display</string></property>
+             <layout class="QVBoxLayout" name="display_group_layout">
+              <item><widget class="QPushButton" name="btn_show_all"><property name="text"><string>Show All Keys</string></property><property name="checkable"><bool>true</bool></property><property name="checked"><bool>true</bool></property></widget></item>
+              <item><widget class="QPushButton" name="btn_show_selected"><property name="text"><string>Show Selected Only</string></property><property name="checkable"><bool>true</bool></property></widget></item>
+              <item><widget class="QPushButton" name="btn_show_none"><property name="text"><string>Hide All Keys</string></property><property name="checkable"><bool>true</bool></property></widget></item>
+              <item><widget class="QCheckBox" name="chk_show_rows"><property name="text"><string>Show Row Guides</string></property><property name="checked"><bool>true</bool></property></widget></item>
+              <item><widget class="QCheckBox" name="chk_show_recognized"><property name="text"><string>Show Recognized Labels</string></property><property name="checked"><bool>false</bool></property></widget></item>
+              <item><widget class="QCheckBox" name="chk_hide_original"><property name="text"><string>Hide Original Legends</string></property><property name="checked"><bool>false</bool></property></widget></item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="help_label">
+             <property name="text">
+              <string>Controls:
+- Click key -&gt; select
+- Ctrl+click -&gt; add to selection
+- Enter -&gt; merge selected
+- Del -&gt; delete selected
+- Esc -&gt; clear selection
+- Click empty -&gt; add new key</string>
+             </property>
+             <property name="wordWrap"><bool>true</bool></property>
+            </widget>
+           </item>
+           <item><spacer name="controls_right_spacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="image_host"/>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,1 @@
+"""QMK Keyboard Visualizer package."""
