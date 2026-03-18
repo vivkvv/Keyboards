@@ -5,7 +5,7 @@ from typing import Optional, Callable
 from dataclasses import dataclass, field
 import time
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QProgressBar
 from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics
 from PySide6.QtCore import Qt, Signal, QRect
 
@@ -339,8 +339,12 @@ class TypingStatsWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 5, 10, 5)
+        root_layout.setSpacing(4)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
 
         self._accuracy_label = QLabel("Accuracy: 100%")
         self._accuracy_label.setStyleSheet("color: #4CAF50; font-size: 14px;")
@@ -372,8 +376,29 @@ class TypingStatsWidget(QWidget):
         layout.addStretch()
         layout.addWidget(self._errors_label)
 
+        self._speed_bar_label = QLabel("Speed")
+        self._speed_bar_label.setStyleSheet("color: #9e9e9e; font-size: 12px;")
+        self._speed_bar = QProgressBar()
+        self._speed_bar.setRange(0, 100)
+        self._speed_bar.setValue(0)
+        self._speed_bar.setTextVisible(True)
+        self._speed_bar.setFormat("0.0 WPM")
+        self._speed_bar.setFixedHeight(10)
+        self._speed_bar.setMaximumWidth(180)
+
+        speed_row = QHBoxLayout()
+        speed_row.setContentsMargins(0, 0, 0, 0)
+        speed_row.setSpacing(8)
+        speed_row.addWidget(self._speed_bar_label, 0)
+        speed_row.addWidget(self._speed_bar, 0)
+        speed_row.addStretch()
+
+        root_layout.addLayout(layout)
+        root_layout.addLayout(speed_row)
+
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAutoFillBackground(False)
+        self._update_speed_bar(0.0)
 
     def update_stats(self, stats: TypingStats) -> None:
         """Update displayed statistics."""
@@ -395,3 +420,38 @@ class TypingStatsWidget(QWidget):
         self._speed_label.setText(f"Correct: {stats.correct_wpm:.1f} WPM")
         self._error_speed_label.setText(f"Errors: {stats.error_wpm:.1f} WPM")
         self._errors_label.setText(f"Errors: {stats.error_chars}")
+        self._update_speed_bar(stats.correct_wpm)
+
+    def _update_speed_bar(self, wpm: float) -> None:
+        """Update the live speed indicator."""
+        clamped = max(0.0, min(100.0, wpm))
+        if wpm >= 100.0:
+            color = "#42a5f5"
+        elif wpm >= 70.0:
+            color = "#66bb6a"
+        elif wpm >= 50.0:
+            color = "#9ccc65"
+        elif wpm >= 30.0:
+            color = "#ffee58"
+        elif wpm >= 20.0:
+            color = "#ffb74d"
+        else:
+            color = "#ef5350"
+        self._speed_bar.setValue(int(round(clamped)))
+        self._speed_bar.setFormat(f"{wpm:.1f} WPM")
+        self._speed_bar.setStyleSheet(
+            f"""
+            QProgressBar {{
+                border: 1px solid #424242;
+                border-radius: 5px;
+                background-color: #1f1f1f;
+                color: #d0d0d0;
+                text-align: center;
+                font-size: 10px;
+            }}
+            QProgressBar::chunk {{
+                border-radius: 4px;
+                background-color: {color};
+            }}
+            """
+        )

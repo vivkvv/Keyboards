@@ -101,7 +101,7 @@ class TutorStatsWindow(QWidget):
         self._tabs.addTab(self._sections_table, "Sections")
 
         self._lessons_table = self._build_table(
-            ["Section", "Lesson", "Attempts", "Completed", "Best Accuracy", "Best WPM", "Last Played"]
+            ["Section", "Lesson", "Attempts", "Completed", "Avg Accuracy", "Best Accuracy", "Best WPM", "Last Played"]
         )
         self._tabs.addTab(self._lessons_table, "Lessons")
 
@@ -292,6 +292,7 @@ class TutorStatsWindow(QWidget):
                 row.lesson_title,
                 str(row.attempts),
                 str(row.completed_attempts),
+                f"{row.average_accuracy:.1f}%",
                 f"{row.best_accuracy:.1f}%",
                 f"{row.best_correct_wpm:.1f}",
                 row.last_played_at.replace("T", " ")[:19],

@@ -775,13 +775,21 @@ class TutorOverlayWindow(QWidget):
                 elif state.completed:
                     marker = "✓ "
                     color = self._color_for_accuracy(state.average_accuracy)
-                    suffix = self._format_lesson_speed_suffix(state.average_correct_wpm)
+                    suffix = self._format_lesson_metrics_suffix(
+                        state.average_accuracy,
+                        state.average_correct_wpm,
+                    )
                 else:
                     marker = "• "
                     color = self._color_for_accuracy(state.average_accuracy)
-                    suffix = self._format_lesson_speed_suffix(state.average_correct_wpm)
+                    suffix = self._format_lesson_metrics_suffix(
+                        state.average_accuracy,
+                        state.average_correct_wpm,
+                    )
 
-                item.setText(0, f"{marker}{prefix}{lesson.title}{suffix}")
+                display_text = f"{marker}{prefix}{lesson.title}{suffix}"
+                item.setText(0, display_text)
+                item.setToolTip(0, display_text)
                 item.setForeground(0, color)
 
     @staticmethod
@@ -794,12 +802,16 @@ class TutorOverlayWindow(QWidget):
         return QColor("#e57373")
 
     @staticmethod
-    def _format_lesson_speed_suffix(correct_wpm: float) -> str:
-        """Format average speed as a compact CPM suffix for the lesson tree."""
-        if correct_wpm <= 0:
+    def _format_lesson_metrics_suffix(average_accuracy: float, correct_wpm: float) -> str:
+        """Format accuracy and speed as a compact suffix for the lesson tree."""
+        parts: list[str] = []
+        if average_accuracy > 0:
+            parts.append(f"{int(round(average_accuracy))}%")
+        if correct_wpm > 0:
+            parts.append(f"{int(round(correct_wpm))}w")
+        if not parts:
             return ""
-        cpm = int(round(correct_wpm * 5.0))
-        return f"   {cpm} cpm"
+        return "   " + "   ".join(parts)
 
     def highlight_key(
         self,

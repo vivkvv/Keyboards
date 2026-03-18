@@ -43,6 +43,7 @@ class LessonStatRow:
     lesson_title: str
     attempts: int
     completed_attempts: int
+    average_accuracy: float
     best_accuracy: float
     best_correct_wpm: float
     last_played_at: str
@@ -525,6 +526,7 @@ class TutorStatsDatabase:
                 section_title,
                 COUNT(*) AS attempts,
                 COALESCE(SUM(completed), 0) AS completed_attempts,
+                COALESCE(AVG(accuracy), 0) AS average_accuracy,
                 COALESCE(MAX(accuracy), 0) AS best_accuracy,
                 COALESCE(MAX(correct_wpm), 0) AS best_correct_wpm,
                 MAX(COALESCE(finished_at, started_at)) AS last_played_at
@@ -546,6 +548,7 @@ class TutorStatsDatabase:
                 lesson_title=str(row["lesson_title"]),
                 attempts=int(row["attempts"]),
                 completed_attempts=int(row["completed_attempts"]),
+                average_accuracy=float(row["average_accuracy"]),
                 best_accuracy=float(row["best_accuracy"]),
                 best_correct_wpm=float(row["best_correct_wpm"]),
                 last_played_at=str(row["last_played_at"] or ""),
