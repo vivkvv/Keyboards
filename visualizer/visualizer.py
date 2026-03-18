@@ -85,7 +85,8 @@ def _position_main_window(window: MainWindow, screen) -> None:
     if desired.width() <= 0 or desired.height() <= 0:
         desired = window.sizeHint()
     width = min(max(desired.width(), window.minimumWidth()), available.width())
-    height = min(max(desired.height(), window.minimumHeight()), available.height())
+    height = min(max(desired.height(), window.minimumHeight()),
+                 available.height())
     window.resize(width, height)
     _center_widget_on_screen(window, screen)
 

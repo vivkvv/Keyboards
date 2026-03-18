@@ -141,6 +141,7 @@ class KeyboardWidget(QGraphicsView):
         self._show_finger_movement_arrows = False
         self._finger_motion_items: list[QGraphicsLineItem | QGraphicsPolygonItem] = []
         self._tutor_feedback_timers: dict[int, QTimer] = {}
+        self._debug_log_callback = None
 
         # View settings
         from PySide6.QtGui import QPainter
@@ -260,6 +261,7 @@ class KeyboardWidget(QGraphicsView):
 
     def _switch_to_hold_mode(self, key_index: int) -> None:
         """Switch a pressed key to hold mode (orange) after tapping term."""
+        self._debug_log(f"KeyboardWidget.switch_to_hold_mode idx={key_index}")
         if key_index in self._key_items:
             item = self._key_items[key_index]
             if item._pressed:  # Only if still pressed
@@ -298,6 +300,14 @@ class KeyboardWidget(QGraphicsView):
         if key_index not in self._key_items:
             return
         self._key_items[key_index].set_hid_active(active)
+
+    def set_debug_log_callback(self, callback) -> None:
+        """Register a debug log callback used for key/hold tracing."""
+        self._debug_log_callback = callback
+
+    def _debug_log(self, message: str) -> None:
+        if self._debug_log_callback is not None:
+            self._debug_log_callback(message)
 
     def clear_hid_highlights(self) -> None:
         """Clear all firmware/HID contours without touching normal highlights."""

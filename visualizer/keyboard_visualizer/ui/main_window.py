@@ -184,6 +184,7 @@ class MainWindow(QMainWindow):
 
         # Debug panel
         self._debug_panel = DebugPanel()
+        self._keyboard_widget.set_debug_log_callback(self._debug_panel.log)
         splitter.addWidget(self._debug_panel)
 
         # Set splitter sizes (keyboard takes more space)
@@ -1039,7 +1040,11 @@ class MainWindow(QMainWindow):
         if physical_key_index is not None:
             self._pressed_physical_key_indices.add(physical_key_index)
 
-        self._debug_panel.log_key_event("PRESS", scancode, vk_code, qmk_code, key_index)
+        if is_hold:
+            self._debug_panel.log(
+                f"HOLD PRESS: sc=0x{scancode:02X} vk=0x{vk_code:02X} qmk={qmk_code} "
+                f"key_index={key_index} physical_key_index={physical_key_index}"
+            )
 
         if key_index is not None:
             self._keyboard_widget.highlight_key(key_index, True, hold_mode=is_hold)
@@ -1062,10 +1067,11 @@ class MainWindow(QMainWindow):
         space_index = self._scancode_mapper.qmk_to_index.get("KC_SPC")
         if space_index is None:
             return False
-        return (
+        active = (
             space_index in self._pressed_physical_key_indices
             or space_index in self._pressed_hid_key_indices
         )
+        return active
 
     def _handle_tutor_navigation_chord(self, key_index: int | None) -> bool:
         """Handle tutor lesson navigation when Space is held."""
@@ -1158,7 +1164,10 @@ class MainWindow(QMainWindow):
         if physical_key_index is not None:
             self._pressed_physical_key_indices.discard(physical_key_index)
 
-        self._debug_panel.log_key_event("RELEASE", scancode, vk_code, qmk_code, key_index)
+        if qmk_code and qmk_code.startswith(("KC_L", "KC_R")):
+            self._debug_panel.log(
+                f"RELEASE: sc=0x{scancode:02X} vk=0x{vk_code:02X} qmk={qmk_code} key_index={key_index}"
+            )
 
         if key_index is not None:
             self._keyboard_widget.highlight_key(key_index, False)
@@ -1191,13 +1200,19 @@ class MainWindow(QMainWindow):
             if self._keyboard_overlay and self._keyboard_overlay.isVisible():
                 self._keyboard_overlay.set_hid_key_active(event.key_index, True)
             self._handle_tutor_navigation_hid(event.key_index)
-            self._debug_panel.log(f"HID key down: idx={event.key_index}")
+            self._debug_panel.log(
+                f"HID key down: counter={event.counter} idx={event.key_index} "
+                f"pressed_hid={sorted(self._pressed_hid_key_indices)}"
+            )
         elif event.event_type == VendorKeyEventType.UP:
             self._pressed_hid_key_indices.discard(event.key_index)
             self._keyboard_widget.set_hid_key_active(event.key_index, False)
             if self._keyboard_overlay and self._keyboard_overlay.isVisible():
                 self._keyboard_overlay.set_hid_key_active(event.key_index, False)
-            self._debug_panel.log(f"HID key up: idx={event.key_index}")
+            self._debug_panel.log(
+                f"HID key up: counter={event.counter} idx={event.key_index} "
+                f"pressed_hid={sorted(self._pressed_hid_key_indices)}"
+            )
 
     def _on_input_error(self, message: str) -> None:
         """Handle error from input backend."""
@@ -1578,6 +1593,10 @@ class MainWindow(QMainWindow):
 
     def _apply_active_layer(self, layer_index: int) -> None:
         """Apply a hardware-reported active layer to all keyboard widgets."""
+        self._debug_panel.log(
+            f"Apply active layer: requested={layer_index} last_polled={self._last_polled_layer} "
+            f"displayed_before={self._get_displayed_layer()}"
+        )
         combo_index = self._find_builtin_layer_view_index(layer_index)
         if combo_index is not None and self._layer_combo.currentIndex() != combo_index:
             self._debug_panel.log(f"HID layer apply: {layer_index} -> combo index {combo_index}")
@@ -1604,10 +1623,17 @@ class MainWindow(QMainWindow):
             return
 
         if layer_index is None or layer_index >= self._keymap.layer_count:
+            self._debug_panel.log(
+                f"HID layer poll ignored: layer_index={layer_index} layer_count={self._keymap.layer_count}"
+            )
             return
 
         if layer_index != self._last_polled_layer:
-            self._debug_panel.log(f"HID layer polled: {layer_index}")
+            self._debug_panel.log(
+                f"HID layer polled: layer_index={layer_index} last_polled={self._last_polled_layer} "
+                f"pressed_phys={sorted(self._pressed_physical_key_indices)} "
+                f"pressed_hid={sorted(self._pressed_hid_key_indices)}"
+            )
             self._last_polled_layer = layer_index
             self._apply_active_layer(layer_index)
 
