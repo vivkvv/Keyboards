@@ -63,6 +63,7 @@ class CharState:
     char: str
     typed: bool = False
     correct: bool = True
+    typed_char: Optional[str] = None
     # Which key index should be pressed (for finger hints)
     key_index: Optional[int] = None
 
@@ -168,6 +169,7 @@ class TypingTextWidget(QWidget):
             self._ensure_started()
             self._char_states[self._current_pos].typed = True
             self._char_states[self._current_pos].correct = True
+            self._char_states[self._current_pos].typed_char = None
             self._stats.correct_chars += 1
             self._current_pos += 1
             self._stats.current_position = self._current_pos
@@ -191,10 +193,11 @@ class TypingTextWidget(QWidget):
             # Error
             self._last_attempt_outcome = AttemptOutcome.ERROR
             self._stats.error_chars += 1
+            self._char_states[self._current_pos].correct = False
+            self._char_states[self._current_pos].typed_char = char
 
             if self._error_mode == ErrorMode.CONTINUE:
                 self._char_states[self._current_pos].typed = True
-                self._char_states[self._current_pos].correct = False
                 self._current_pos += 1
                 self._stats.current_position = self._current_pos
 
@@ -244,6 +247,7 @@ class TypingTextWidget(QWidget):
         for state in self._char_states:
             state.typed = False
             state.correct = True
+            state.typed_char = None
         self._current_pos = 0
         self._stats = TypingStats(total_chars=len(self._char_states))
         self._started_at = None
@@ -287,6 +291,10 @@ class TypingTextWidget(QWidget):
 
         metrics = QFontMetrics(self._font)
         char_height = metrics.height()
+        wrong_font = QFont(self._font)
+        wrong_font.setBold(False)
+        wrong_font.setPointSize(max(10, self._font.pointSize() - 6))
+        wrong_metrics = QFontMetrics(wrong_font)
 
         # Center text vertically
         y = (self.height() + char_height) // 2 - metrics.descent()
@@ -312,6 +320,14 @@ class TypingTextWidget(QWidget):
                 painter.setPen(self._color_pending)
 
             painter.drawText(x, y, state.char)
+
+            if state.typed_char and state.typed_char != state.char and not state.correct:
+                wrong_y = y + wrong_metrics.height()
+                painter.setFont(wrong_font)
+                painter.setPen(self._color_error)
+                painter.drawText(x, wrong_y, state.typed_char)
+                painter.setFont(self._font)
+
             x += char_width
 
         painter.end()

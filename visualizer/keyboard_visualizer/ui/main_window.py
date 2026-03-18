@@ -751,6 +751,10 @@ class MainWindow(QMainWindow):
                 self._config.get_tutor_correct_sound(),
                 self._config.get_tutor_incorrect_sound(),
             )
+            self._tutor_overlay.set_lesson_sounds(
+                self._config.get_tutor_lesson_start_sound(),
+                self._config.get_tutor_lesson_complete_sound(),
+            )
             self._tutor_overlay.set_stats_context(self._stats_db, self._tutor_user)
             self._tutor_overlay.set_course(self._tutor_course_id)
 
@@ -1152,7 +1156,7 @@ class MainWindow(QMainWindow):
             if self._handle_tutor_navigation_chord(physical_key_index):
                 return
             char = self._vk_to_char(vk_code)
-            if char and not self._is_tutor_navigation_chord_active():
+            if char and (char == " " or not self._is_tutor_navigation_chord_active()):
                 self._tutor_overlay.handle_keypress(char, key_index)
 
     def _is_tutor_navigation_chord_active(self) -> bool:
@@ -1185,7 +1189,7 @@ class MainWindow(QMainWindow):
             self._tutor_overlay.navigate_next_lesson()
             return True
 
-        return key_index in self._pressed_key_indices
+        return False
 
     def _handle_tutor_navigation_hid(self, key_index: int) -> bool:
         """Handle tutor lesson navigation from firmware-level key indices."""
@@ -1980,6 +1984,10 @@ class MainWindow(QMainWindow):
                 self._config.get_tutor_click_sounds_enabled(),
                 self._config.get_tutor_correct_sound(),
                 self._config.get_tutor_incorrect_sound(),
+            )
+            self._tutor_overlay.set_lesson_sounds(
+                self._config.get_tutor_lesson_start_sound(),
+                self._config.get_tutor_lesson_complete_sound(),
             )
         self._keyboard_widget.set_show_finger_movement_arrows(
             self._config.get_tutor_show_movement_arrows()

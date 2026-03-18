@@ -118,6 +118,8 @@ class TutorOverlayWindow(QWidget):
         self._click_sounds_enabled = False
         self._correct_sound_path = ""
         self._incorrect_sound_path = ""
+        self._lesson_start_sound_path = ""
+        self._lesson_complete_sound_path = ""
         self._stats_db: TutorStatsDatabase | None = None
         self._tutor_user: TutorUser | None = None
         self._active_attempt_id: int | None = None
@@ -322,6 +324,11 @@ class TutorOverlayWindow(QWidget):
         self._correct_sound_path = correct_sound
         self._incorrect_sound_path = incorrect_sound
 
+    def set_lesson_sounds(self, start_sound: str, complete_sound: str) -> None:
+        """Configure tutor lesson start and completion sounds."""
+        self._lesson_start_sound_path = start_sound
+        self._lesson_complete_sound_path = complete_sound
+
     def set_finger_palette(self, palette: dict[Finger, QColor]) -> None:
         """Set tutor finger colors and refresh legend."""
         self._keyboard_widget.set_finger_palette(palette)
@@ -508,6 +515,7 @@ class TutorOverlayWindow(QWidget):
         self._last_timed_event_at = None
         self._update_lesson_status()
         self._update_navigation_buttons()
+        self._play_lesson_start_sound()
 
     def _on_lesson_selection_changed(self) -> None:
         """Handle left sidebar lesson selection."""
@@ -534,6 +542,17 @@ class TutorOverlayWindow(QWidget):
         self._update_lesson_status()
         self._update_navigation_buttons()
         self._refresh_lesson_tree_progress()
+        self._play_lesson_complete_sound()
+
+    def _play_lesson_start_sound(self) -> None:
+        """Play a short cue when a lesson is loaded or restarted."""
+        if self._lesson_start_sound_path:
+            self._sound_player.play_file(self._lesson_start_sound_path)
+
+    def _play_lesson_complete_sound(self) -> None:
+        """Play a short cue when a lesson is completed."""
+        if self._lesson_complete_sound_path:
+            self._sound_player.play_file(self._lesson_complete_sound_path)
 
     def _refresh_stats(self) -> None:
         """Refresh lesson stats while the overlay is visible."""
@@ -752,15 +771,35 @@ class TutorOverlayWindow(QWidget):
                 if state is None:
                     marker = ""
                     color = QColor("#d0d0d0")
+                    suffix = ""
                 elif state.completed:
                     marker = "✓ "
-                    color = QColor("#66bb6a")
+                    color = self._color_for_accuracy(state.average_accuracy)
+                    suffix = self._format_lesson_speed_suffix(state.average_correct_wpm)
                 else:
                     marker = "• "
-                    color = QColor("#64b5f6")
+                    color = self._color_for_accuracy(state.average_accuracy)
+                    suffix = self._format_lesson_speed_suffix(state.average_correct_wpm)
 
-                item.setText(0, f"{marker}{prefix}{lesson.title}")
+                item.setText(0, f"{marker}{prefix}{lesson.title}{suffix}")
                 item.setForeground(0, color)
+
+    @staticmethod
+    def _color_for_accuracy(accuracy: float) -> QColor:
+        """Return a coarse lesson-tree color for average accuracy."""
+        if accuracy >= 97.0:
+            return QColor("#66bb6a")
+        if accuracy >= 90.0:
+            return QColor("#d4c15a")
+        return QColor("#e57373")
+
+    @staticmethod
+    def _format_lesson_speed_suffix(correct_wpm: float) -> str:
+        """Format average speed as a compact CPM suffix for the lesson tree."""
+        if correct_wpm <= 0:
+            return ""
+        cpm = int(round(correct_wpm * 5.0))
+        return f"   {cpm} cpm"
 
     def highlight_key(
         self,

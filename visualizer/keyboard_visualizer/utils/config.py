@@ -97,6 +97,12 @@ class Config:
     DEFAULT_TUTOR_INCORRECT_SOUND = (
         Path(__file__).parent.parent / "resources" / "sounds" / "mixkit-hard-typewriter-click-1119.wav"
     )
+    DEFAULT_TUTOR_LESSON_START_SOUND = (
+        Path(__file__).parent.parent / "resources" / "sounds" / "mixkit-cool-interface-click-tone-2568.wav"
+    )
+    DEFAULT_TUTOR_LESSON_COMPLETE_SOUND = (
+        Path(__file__).parent.parent / "resources" / "sounds" / "mixkit-modern-click-box-check-1120.wav"
+    )
 
     def __init__(self, config_path: Path | str | None = None) -> None:
         self._path = Path(config_path) if config_path else self.DEFAULT_CONFIG_PATH
@@ -397,6 +403,34 @@ class Config:
     def set_tutor_incorrect_sound(self, path: str) -> None:
         """Set tutor sound for incorrect keystrokes."""
         self._config["ui"]["tutor_incorrect_sound"] = self._serialize_path(path)
+        self.save()
+
+    def get_tutor_lesson_start_sound(self) -> str:
+        """Get tutor sound for lesson start/restart."""
+        value = self._config.get(
+            "ui",
+            "tutor_lesson_start_sound",
+            fallback=str(self.DEFAULT_TUTOR_LESSON_START_SOUND),
+        )
+        return self._deserialize_path(value) or str(self.DEFAULT_TUTOR_LESSON_START_SOUND)
+
+    def set_tutor_lesson_start_sound(self, path: str) -> None:
+        """Set tutor sound for lesson start/restart."""
+        self._config["ui"]["tutor_lesson_start_sound"] = self._serialize_path(path)
+        self.save()
+
+    def get_tutor_lesson_complete_sound(self) -> str:
+        """Get tutor sound for lesson completion."""
+        value = self._config.get(
+            "ui",
+            "tutor_lesson_complete_sound",
+            fallback=str(self.DEFAULT_TUTOR_LESSON_COMPLETE_SOUND),
+        )
+        return self._deserialize_path(value) or str(self.DEFAULT_TUTOR_LESSON_COMPLETE_SOUND)
+
+    def set_tutor_lesson_complete_sound(self, path: str) -> None:
+        """Set tutor sound for lesson completion."""
+        self._config["ui"]["tutor_lesson_complete_sound"] = self._serialize_path(path)
         self.save()
 
     def get_hid_highlight_color(self) -> str:

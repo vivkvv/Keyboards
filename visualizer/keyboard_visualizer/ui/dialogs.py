@@ -843,6 +843,26 @@ class SettingsDialog(QDialog):
         incorrect_btn.clicked.connect(self._browse_tutor_incorrect_sound)
         incorrect_row.addWidget(incorrect_btn)
         tutor_layout.addRow("Incorrect sound:", incorrect_row)
+
+        self._tutor_lesson_start_sound = config.get_tutor_lesson_start_sound()
+        lesson_start_row = QHBoxLayout()
+        self._tutor_lesson_start_sound_label = QLineEdit(self._tutor_lesson_start_sound)
+        self._tutor_lesson_start_sound_label.setReadOnly(True)
+        lesson_start_row.addWidget(self._tutor_lesson_start_sound_label)
+        lesson_start_btn = QPushButton("Browse...")
+        lesson_start_btn.clicked.connect(self._browse_tutor_lesson_start_sound)
+        lesson_start_row.addWidget(lesson_start_btn)
+        tutor_layout.addRow("Lesson start sound:", lesson_start_row)
+
+        self._tutor_lesson_complete_sound = config.get_tutor_lesson_complete_sound()
+        lesson_complete_row = QHBoxLayout()
+        self._tutor_lesson_complete_sound_label = QLineEdit(self._tutor_lesson_complete_sound)
+        self._tutor_lesson_complete_sound_label.setReadOnly(True)
+        lesson_complete_row.addWidget(self._tutor_lesson_complete_sound_label)
+        lesson_complete_btn = QPushButton("Browse...")
+        lesson_complete_btn.clicked.connect(self._browse_tutor_lesson_complete_sound)
+        lesson_complete_row.addWidget(lesson_complete_btn)
+        tutor_layout.addRow("Lesson complete sound:", lesson_complete_row)
         tutor_tab = QWidget()
         tutor_tab_layout = QVBoxLayout(tutor_tab)
         tutor_tab_layout.addWidget(tutor_group)
@@ -966,6 +986,10 @@ class SettingsDialog(QDialog):
         self._tutor_correct_sound_label.setText(self._tutor_correct_sound)
         self._tutor_incorrect_sound = str(Config.DEFAULT_TUTOR_INCORRECT_SOUND)
         self._tutor_incorrect_sound_label.setText(self._tutor_incorrect_sound)
+        self._tutor_lesson_start_sound = str(Config.DEFAULT_TUTOR_LESSON_START_SOUND)
+        self._tutor_lesson_start_sound_label.setText(self._tutor_lesson_start_sound)
+        self._tutor_lesson_complete_sound = str(Config.DEFAULT_TUTOR_LESSON_COMPLETE_SOUND)
+        self._tutor_lesson_complete_sound_label.setText(self._tutor_lesson_complete_sound)
         self._hid_highlight_color_btn.set_color(Config.DEFAULT_HID_HIGHLIGHT_COLOR)
         self._hid_highlight_duration_spin.setValue(Config.DEFAULT_HID_HIGHLIGHT_DURATION_MS)
         self._language_sound_bindings = []
@@ -994,6 +1018,30 @@ class SettingsDialog(QDialog):
         if path:
             self._tutor_incorrect_sound = path
             self._tutor_incorrect_sound_label.setText(path)
+
+    def _browse_tutor_lesson_start_sound(self) -> None:
+        """Browse for tutor lesson-start sound."""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Lesson Start Sound",
+            self._tutor_lesson_start_sound or "",
+            "WAV Files (*.wav);;All Files (*)",
+        )
+        if path:
+            self._tutor_lesson_start_sound = path
+            self._tutor_lesson_start_sound_label.setText(path)
+
+    def _browse_tutor_lesson_complete_sound(self) -> None:
+        """Browse for tutor lesson-complete sound."""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Lesson Complete Sound",
+            self._tutor_lesson_complete_sound or "",
+            "WAV Files (*.wav);;All Files (*)",
+        )
+        if path:
+            self._tutor_lesson_complete_sound = path
+            self._tutor_lesson_complete_sound_label.setText(path)
 
     def _refresh_language_sound_bindings_table(self) -> None:
         """Refresh the language sound binding table."""
@@ -1086,6 +1134,8 @@ class SettingsDialog(QDialog):
         self._config.set_tutor_click_sounds_enabled(self._tutor_click_sounds_cb.isChecked())
         self._config.set_tutor_correct_sound(self._tutor_correct_sound)
         self._config.set_tutor_incorrect_sound(self._tutor_incorrect_sound)
+        self._config.set_tutor_lesson_start_sound(self._tutor_lesson_start_sound)
+        self._config.set_tutor_lesson_complete_sound(self._tutor_lesson_complete_sound)
         self._config.set_hid_highlight_color(self._hid_highlight_color_btn.get_color())
         self._config.set_hid_highlight_duration_ms(self._hid_highlight_duration_spin.value())
         self._config.set_language_sound_bindings(self._language_sound_bindings)

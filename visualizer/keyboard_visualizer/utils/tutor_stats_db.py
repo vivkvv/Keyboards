@@ -54,6 +54,8 @@ class LessonProgressState:
 
     attempts: int = 0
     completed: bool = False
+    average_accuracy: float = 0.0
+    average_correct_wpm: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -553,11 +555,29 @@ class TutorStatsDatabase:
 
     def get_lesson_progress_map(self, user_id: int, course_id: str | None = None) -> dict[int, LessonProgressState]:
         """Return compact per-lesson progress used by the tutor sidebar."""
-        rows = self.get_lesson_stats(user_id, course_id)
+        query = """
+            SELECT
+                lesson_id,
+                COUNT(*) AS attempts,
+                COALESCE(MAX(completed), 0) AS completed,
+                COALESCE(AVG(accuracy), 0) AS average_accuracy,
+                COALESCE(AVG(correct_wpm), 0) AS average_correct_wpm
+            FROM lesson_attempts
+            WHERE user_id = ?
+        """
+        params: list[object] = [user_id]
+        if course_id:
+            query += " AND course_id = ?"
+            params.append(course_id)
+        query += " GROUP BY lesson_id"
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
         return {
-            row.lesson_id: LessonProgressState(
-                attempts=row.attempts,
-                completed=row.completed_attempts > 0,
+            int(row["lesson_id"]): LessonProgressState(
+                attempts=int(row["attempts"]),
+                completed=bool(row["completed"]),
+                average_accuracy=float(row["average_accuracy"]),
+                average_correct_wpm=float(row["average_correct_wpm"]),
             )
             for row in rows
         }

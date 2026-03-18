@@ -79,8 +79,8 @@ class TutorStatsWindow(QWidget):
             ("unique_lessons_completed", "Lessons Completed"),
             ("average_accuracy", "Avg Accuracy"),
             ("average_correct_wpm", "Avg Correct WPM"),
-            ("total_correct_chars", "Correct Chars"),
-            ("total_error_chars", "Error Chars"),
+            ("total_correct_chars", "Correct"),
+            ("total_error_chars", "Errors"),
         ]
         for row, (key, title) in enumerate(labels):
             title_label = QLabel(f"{title}:")
@@ -106,7 +106,7 @@ class TutorStatsWindow(QWidget):
         self._tabs.addTab(self._lessons_table, "Lessons")
 
         self._symbols_table = self._build_table(
-            ["Symbol", "Samples", "Valid Timings", "Avg ms", "StdDev ms", "Errors"]
+            ["Symbol", "Samples", "Valid Timing %", "Avg ms", "StdDev ms", "Error %"]
         )
         self._tabs.addTab(self._symbols_table, "Symbols")
 
@@ -246,8 +246,15 @@ class TutorStatsWindow(QWidget):
         self._summary_labels["unique_lessons_completed"].setText(str(overview.unique_lessons_completed))
         self._summary_labels["average_accuracy"].setText(f"{overview.average_accuracy:.1f}%")
         self._summary_labels["average_correct_wpm"].setText(f"{overview.average_correct_wpm:.1f}")
-        self._summary_labels["total_correct_chars"].setText(str(overview.total_correct_chars))
-        self._summary_labels["total_error_chars"].setText(str(overview.total_error_chars))
+        total_chars = overview.total_correct_chars + overview.total_error_chars
+        if total_chars > 0:
+            correct_pct = (overview.total_correct_chars / total_chars) * 100.0
+            error_pct = (overview.total_error_chars / total_chars) * 100.0
+            self._summary_labels["total_correct_chars"].setText(f"{correct_pct:.1f}%")
+            self._summary_labels["total_error_chars"].setText(f"{error_pct:.1f}%")
+        else:
+            self._summary_labels["total_correct_chars"].setText("-")
+            self._summary_labels["total_error_chars"].setText("-")
 
     def _populate_sections(self) -> None:
         """Fill sections table."""
@@ -306,13 +313,21 @@ class TutorStatsWindow(QWidget):
             display_symbol = row.symbol
             if display_symbol == " ":
                 display_symbol = "Space"
+            if row.sample_count > 0:
+                valid_pct = (row.valid_sample_count / row.sample_count) * 100.0
+                error_pct = (row.error_count / row.sample_count) * 100.0
+                valid_text = f"{valid_pct:.1f}%"
+                error_text = f"{error_pct:.1f}%"
+            else:
+                valid_text = "-"
+                error_text = "-"
             values = [
                 display_symbol,
                 str(row.sample_count),
-                str(row.valid_sample_count),
+                valid_text,
                 f"{row.mean_latency_ms:.1f}",
                 f"{row.stddev_latency_ms:.1f}",
-                str(row.error_count),
+                error_text,
             ]
             for column, value in enumerate(values):
                 self._symbols_table.setItem(row_index, column, QTableWidgetItem(value))
