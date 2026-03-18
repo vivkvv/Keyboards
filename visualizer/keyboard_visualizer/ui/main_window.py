@@ -737,6 +737,7 @@ class MainWindow(QMainWindow):
             )
             self._keyboard_overlay.set_caps_lock_mode(self._caps_lock_on)
             self._apply_colors()
+            self._apply_keyboard_widget_runtime_state(self._keyboard_overlay.keyboard_widget())
             if not self._layout_check_timer.isActive():
                 self._layout_check_timer.start()
             self._keyboard_overlay.closed.connect(self._on_keyboard_overlay_closed)
@@ -775,6 +776,8 @@ class MainWindow(QMainWindow):
                 self._tutor_hand_schemes,
                 self._tutor_key_scheme_assignments,
             )
+            self._apply_colors()
+            self._apply_keyboard_widget_runtime_state(self._tutor_overlay.keyboard_widget())
             self._tutor_overlay.set_click_sounds(
                 self._config.get_tutor_click_sounds_enabled(),
                 self._config.get_tutor_correct_sound(),
@@ -1008,12 +1011,12 @@ class MainWindow(QMainWindow):
             self._is_shift_key(vk) for vk in self._pressed_keys
         )
         self._debug_panel.log(f"Shift mode: {shift_pressed}")
-        self._keyboard_widget.set_shift_mode(shift_pressed)
         self._caps_lock_on = self._layout_detector.get_caps_lock_state()
-        if self._os_layout_mode:
-            self._keyboard_widget.set_caps_lock_mode(self._caps_lock_on)
+        self._apply_keyboard_widget_runtime_state(self._keyboard_widget)
+        if self._keyboard_overlay and self._keyboard_overlay.isVisible():
+            self._apply_keyboard_widget_runtime_state(self._keyboard_overlay.keyboard_widget())
         if self._tutor_overlay and self._tutor_overlay.isVisible():
-            self._tutor_overlay.set_caps_lock_mode(self._caps_lock_on)
+            self._apply_keyboard_widget_runtime_state(self._tutor_overlay.keyboard_widget())
 
     def _get_highlight_layer_for_press(self) -> int:
         """Return which layer should be highlighted for a new key press."""
@@ -1101,6 +1104,42 @@ class MainWindow(QMainWindow):
             return fallback_layer
         return view_layers[0] if view_layers else 0
 
+    def _broadcast_key_highlight(
+        self,
+        key_index: int,
+        pressed: bool,
+        *,
+        hold_mode: bool = False,
+        active_layer: int | None = None,
+    ) -> None:
+        """Broadcast a key press/release highlight to all visible keyboard widgets."""
+        self._keyboard_widget.highlight_key(
+            key_index,
+            pressed,
+            hold_mode=hold_mode,
+            active_layer=active_layer,
+        )
+        if self._keyboard_overlay and self._keyboard_overlay.isVisible():
+            self._keyboard_overlay.highlight_key(
+                key_index,
+                pressed,
+                hold_mode=hold_mode,
+                active_layer=active_layer,
+            )
+        if self._tutor_overlay and self._tutor_overlay.isVisible():
+            self._tutor_overlay.highlight_key(
+                key_index,
+                pressed,
+                hold_mode=hold_mode,
+                active_layer=active_layer,
+            )
+
+    def _broadcast_hid_key_active(self, key_index: int, active: bool) -> None:
+        """Broadcast HID active state to widgets that render HID contours."""
+        self._keyboard_widget.set_hid_key_active(key_index, active)
+        if self._keyboard_overlay and self._keyboard_overlay.isVisible():
+            self._keyboard_overlay.set_hid_key_active(key_index, active)
+
     def _on_key_pressed(self, scancode: int, vk_code: int) -> None:
         """Handle key press event from input backend."""
         # Skip auto-repeat events
@@ -1143,16 +1182,7 @@ class MainWindow(QMainWindow):
                 f"displayed={self._get_displayed_layer()} resolved={highlight_layer}"
             )
         if key_index is not None:
-            self._keyboard_widget.highlight_key(
-                key_index,
-                True,
-                hold_mode=is_hold,
-                active_layer=highlight_layer,
-            )
-
-        # Send character to tutor overlay if open
-        if self._keyboard_overlay and self._keyboard_overlay.isVisible() and key_index is not None:
-            self._keyboard_overlay.highlight_key(
+            self._broadcast_key_highlight(
                 key_index,
                 True,
                 hold_mode=is_hold,
@@ -1276,9 +1306,7 @@ class MainWindow(QMainWindow):
             )
 
         if key_index is not None:
-            self._keyboard_widget.highlight_key(key_index, False)
-            if self._keyboard_overlay and self._keyboard_overlay.isVisible():
-                self._keyboard_overlay.highlight_key(key_index, False)
+            self._broadcast_key_highlight(key_index, False)
 
     def _poll_hid_key_event(self) -> None:
         """Poll the latest firmware-level key event and reflect it as a contour."""
@@ -1303,21 +1331,13 @@ class MainWindow(QMainWindow):
         if event.event_type == VendorKeyEventType.DOWN:
             self._pressed_hid_key_indices.add(event.key_index)
             highlight_layer = self._resolve_pressed_layer_for_hid_key(event.key_index)
-            self._keyboard_widget.highlight_key(
+            self._broadcast_key_highlight(
                 event.key_index,
                 True,
                 hold_mode=True,
                 active_layer=highlight_layer,
             )
-            self._keyboard_widget.set_hid_key_active(event.key_index, True)
-            if self._keyboard_overlay and self._keyboard_overlay.isVisible():
-                self._keyboard_overlay.highlight_key(
-                    event.key_index,
-                    True,
-                    hold_mode=True,
-                    active_layer=highlight_layer,
-                )
-                self._keyboard_overlay.set_hid_key_active(event.key_index, True)
+            self._broadcast_hid_key_active(event.key_index, True)
             self._handle_tutor_navigation_hid(event.key_index)
             self._debug_panel.log(
                 f"HID key down: counter={event.counter} idx={event.key_index} "
@@ -1326,11 +1346,8 @@ class MainWindow(QMainWindow):
             )
         elif event.event_type == VendorKeyEventType.UP:
             self._pressed_hid_key_indices.discard(event.key_index)
-            self._keyboard_widget.highlight_key(event.key_index, False)
-            self._keyboard_widget.set_hid_key_active(event.key_index, False)
-            if self._keyboard_overlay and self._keyboard_overlay.isVisible():
-                self._keyboard_overlay.highlight_key(event.key_index, False)
-                self._keyboard_overlay.set_hid_key_active(event.key_index, False)
+            self._broadcast_key_highlight(event.key_index, False)
+            self._broadcast_hid_key_active(event.key_index, False)
             self._debug_panel.log(
                 f"HID key up: counter={event.counter} idx={event.key_index} "
                 f"pressed_hid={sorted(self._pressed_hid_key_indices)}"
@@ -1675,19 +1692,36 @@ class MainWindow(QMainWindow):
             )
             self._tutor_overlay.set_caps_lock_mode(self._caps_lock_on)
 
-    def _apply_colors(self) -> None:
-        """Apply color settings to keyboard widget."""
+    def _apply_keyboard_widget_runtime_state(self, widget: KeyboardWidget) -> None:
+        """Apply shared live keyboard state to any keyboard widget."""
+        shift_pressed = any(self._is_shift_key(vk) for vk in self._pressed_keys)
+        widget.set_shift_mode(shift_pressed)
+        widget.set_caps_lock_mode(self._caps_lock_on)
+        widget.set_observed_active_layer(self._last_polled_layer)
+
+    def _apply_keyboard_widget_style(self, widget: KeyboardWidget) -> None:
+        """Apply shared keyboard visual settings to any keyboard widget."""
         if not self._keymap:
             return
 
         num_layers = self._keymap.layer_count
         colors = [self._config.get_layer_color(i) for i in range(num_layers)]
-        self._keyboard_widget.set_layer_colors(colors)
-        self._keyboard_widget.set_text_colors(
+        self._debug_panel.log(
+            "Apply widget style: "
+            f"widget={widget.__class__.__name__} "
+            f"tap_text={self._config.get_tap_color()} "
+            f"hold_text={self._config.get_hold_color()} "
+            f"tap_fill={self._config.get_tap_fill_color()} "
+            f"hold_fill={self._config.get_hold_fill_color()} "
+            f"tap_border={self._config.get_tap_border_color()} "
+            f"hold_border={self._config.get_hold_border_color()}"
+        )
+        widget.set_layer_colors(colors)
+        widget.set_text_colors(
             self._config.get_tap_color(),
             self._config.get_hold_color()
         )
-        self._keyboard_widget.set_visual_style(
+        widget.set_visual_style(
             active_layer_text_color=self._config.get_active_layer_text_color(),
             tap_fill_color=self._config.get_tap_fill_color(),
             hold_fill_color=self._config.get_hold_fill_color(),
@@ -1702,36 +1736,22 @@ class MainWindow(QMainWindow):
             hid_border_inset=self._config.get_hid_border_inset(),
             hid_border_style=self._config.get_hid_border_style(),
         )
-        self._keyboard_widget.set_font_scales(
+        widget.set_font_scales(
             self._config.get_label_font_scale_percent() / 100.0,
             self._config.get_grid_label_font_scale_percent() / 100.0,
         )
+
+    def _apply_colors(self) -> None:
+        """Apply color settings to keyboard widget."""
+        if not self._keymap:
+            return
+
+        self._apply_keyboard_widget_style(self._keyboard_widget)
         self._keyboard_widget.set_finger_palette(self._build_finger_palette())
-        if self._keyboard_overlay and self._keyboard_overlay.isVisible():
-            self._keyboard_overlay.set_layer_colors(colors)
-            self._keyboard_overlay.set_text_colors(
-                self._config.get_tap_color(),
-                self._config.get_hold_color(),
-            )
-            self._keyboard_overlay.set_visual_style(
-                active_layer_text_color=self._config.get_active_layer_text_color(),
-                tap_fill_color=self._config.get_tap_fill_color(),
-                hold_fill_color=self._config.get_hold_fill_color(),
-                tap_border_color=self._config.get_tap_border_color(),
-                hold_border_color=self._config.get_hold_border_color(),
-                hid_border_color=self._config.get_hid_border_color(),
-                grid_line_color=self._config.get_grid_line_color(),
-                tap_border_width=self._config.get_tap_border_width(),
-                hold_border_width=self._config.get_hold_border_width(),
-                hid_border_width=self._config.get_hid_border_width(),
-                grid_line_width=self._config.get_grid_line_width(),
-                hid_border_inset=self._config.get_hid_border_inset(),
-                hid_border_style=self._config.get_hid_border_style(),
-            )
-            self._keyboard_overlay.set_font_scales(
-                self._config.get_label_font_scale_percent() / 100.0,
-                self._config.get_grid_label_font_scale_percent() / 100.0,
-            )
+        if self._keyboard_overlay:
+            self._apply_keyboard_widget_style(self._keyboard_overlay.keyboard_widget())
+        if self._tutor_overlay:
+            self._apply_keyboard_widget_style(self._tutor_overlay.keyboard_widget())
 
     def _apply_hid_settings(self) -> None:
         """Apply saved HID highlight settings to the connected HID controller."""
@@ -1787,6 +1807,9 @@ class MainWindow(QMainWindow):
         self._keyboard_widget.set_observed_active_layer(layer_index)
         if self._keyboard_overlay and self._keyboard_overlay.isVisible():
             self._keyboard_overlay.set_observed_active_layer(layer_index)
+            self._keyboard_overlay.set_layer(layer_index)
+        if self._tutor_overlay and self._tutor_overlay.isVisible():
+            self._tutor_overlay.set_layer(layer_index)
         self._debug_panel.log(
             f"Apply active layer: requested={layer_index} last_polled={self._last_polled_layer} "
             f"displayed_before={self._get_displayed_layer()}"

@@ -283,6 +283,10 @@ class TutorOverlayWindow(QWidget):
         """Set the keyboard layout."""
         self._keyboard_widget.set_layout(layout)
 
+    def keyboard_widget(self) -> KeyboardWidget:
+        """Expose the internal keyboard widget for shared styling."""
+        return self._keyboard_widget
+
     def set_keymap(self, keymap: Keymap) -> None:
         """Set the keymap and build character to key mapping."""
         self._keymap = keymap
@@ -758,9 +762,15 @@ class TutorOverlayWindow(QWidget):
                 item.setText(0, f"{marker}{prefix}{lesson.title}")
                 item.setForeground(0, color)
 
-    def highlight_key(self, key_index: int, pressed: bool, hold_mode: bool = False) -> None:
+    def highlight_key(
+        self,
+        key_index: int,
+        pressed: bool,
+        hold_mode: bool = False,
+        active_layer: int | None = None,
+    ) -> None:
         """Highlight a key."""
-        self._keyboard_widget.highlight_key(key_index, pressed, hold_mode)
+        self._keyboard_widget.highlight_key(key_index, pressed, hold_mode, active_layer)
 
     def set_error_mode(self, mode: ErrorMode) -> None:
         """Set how errors are handled."""

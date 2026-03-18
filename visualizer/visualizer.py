@@ -23,6 +23,7 @@ def _apply_stylesheet(app: QApplication) -> None:
         return
 
     app.setStyleSheet(STYLESHEET_PATH.read_text(encoding="utf-8"))
+    app.setStyle("Fusion")
 
 
 def _create_splash() -> QSplashScreen | None:
