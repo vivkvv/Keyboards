@@ -1740,19 +1740,27 @@ class MainWindow(QMainWindow):
         if not self._layout_check_timer.isActive():
             self._layout_check_timer.start()
         window.show()
+        self._request_window_focus(window)
         self._debug_panel.log(opened_message)
         self.hide()
 
     def _focus_auxiliary_window(self, window) -> None:
         """Raise and activate an already open auxiliary window."""
-        window.raise_()
-        window.activateWindow()
+        self._request_window_focus(window)
 
     def _show_and_focus_window(self, window) -> None:
         """Show a window and bring it to the foreground."""
         window.show()
+        self._request_window_focus(window)
+
+    def _request_window_focus(self, window) -> None:
+        """Ask Qt/Windows to bring a window to the foreground reliably."""
         window.raise_()
         window.activateWindow()
+        if hasattr(window, "setFocus"):
+            window.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        QTimer.singleShot(0, window.raise_)
+        QTimer.singleShot(0, window.activateWindow)
 
     def _apply_hid_settings(self) -> None:
         """Apply saved HID highlight settings to the connected HID controller."""

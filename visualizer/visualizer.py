@@ -4,7 +4,7 @@ import sys
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QCursor, QFont, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen, QWidget
 
@@ -108,6 +108,7 @@ def main() -> int:
     splash_started_at = time.monotonic()
     startup_screen = _resolve_startup_screen()
     _position_main_window(window, startup_screen)
+    app.processEvents()
 
     if splash is not None:
         _center_widget_on_screen(splash, startup_screen)
@@ -124,7 +125,11 @@ def main() -> int:
     app.processEvents()
     if splash is not None:
         splash.finish(window)
+    window.raise_()
     window.activateWindow()
+    window.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+    QTimer.singleShot(0, window.raise_)
+    QTimer.singleShot(0, window.activateWindow)
 
     return app.exec()
 
