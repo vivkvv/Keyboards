@@ -53,6 +53,8 @@ class KeyItem(QGraphicsRectItem):
         self._full_keycode = ""
         self._pressed = False
         self._hold_mode = False  # True when key is being held (for MT/LT keys)
+        self._pressed_layer_index: int | None = None
+        self._observed_active_layer_index: int | None = None
         self._hid_active = False
         self._tutor_feedback: str | None = None
 
@@ -62,6 +64,21 @@ class KeyItem(QGraphicsRectItem):
         # Configurable colors
         self._tap_color = self.COLOR_TEXT_TAP
         self._hold_color = self.COLOR_TEXT_HOLD
+        self._active_layer_text_color = QColor("#000000")
+        self._tap_fill_color = QColor(self.COLOR_PRESSED)
+        self._hold_fill_color = QColor(self.COLOR_PRESSED_HOLD)
+        self._tap_border_color = QColor(self.COLOR_BORDER_PRESSED)
+        self._hold_border_color = QColor(self.COLOR_BORDER_PRESSED_HOLD)
+        self._hid_border_color = QColor(self.COLOR_BORDER_HID)
+        self._grid_line_color = QColor(self.COLOR_BORDER)
+        self._tap_border_width = 2.0
+        self._hold_border_width = 2.0
+        self._hid_border_width = 1.5
+        self._grid_line_width = 0.5
+        self._hid_border_inset = 4.0
+        self._hid_border_style = Qt.PenStyle.SolidLine
+        self._label_font_scale = 1.0
+        self._grid_label_font_scale = 1.0
 
         # Overlay mode: semi-transparent keys
         self._overlay_mode = False
@@ -134,11 +151,11 @@ class KeyItem(QGraphicsRectItem):
         # Determine base colors
         if self._pressed:
             if self._hold_mode:
-                bg_color = QColor(self.COLOR_PRESSED_HOLD)
-                border_color = QColor(self.COLOR_BORDER_PRESSED_HOLD)
+                bg_color = QColor(self._hold_fill_color)
+                border_color = QColor(self._hold_border_color)
             else:
-                bg_color = QColor(self.COLOR_PRESSED)
-                border_color = QColor(self.COLOR_BORDER_PRESSED)
+                bg_color = QColor(self._tap_fill_color)
+                border_color = QColor(self._tap_border_color)
         else:
             bg_color = QColor(self.COLOR_DEFAULT)
             border_color = QColor(self.COLOR_BORDER)
@@ -149,7 +166,8 @@ class KeyItem(QGraphicsRectItem):
             border_color.setAlpha(200)
 
         self.setBrush(QBrush(bg_color))
-        self.setPen(QPen(border_color, 1))
+        border_width = self._hold_border_width if self._pressed and self._hold_mode else self._tap_border_width
+        self.setPen(QPen(border_color, border_width))
 
     def set_overlay_mode(self, enabled: bool) -> None:
         """Enable overlay mode with semi-transparent keys."""
@@ -203,6 +221,46 @@ class KeyItem(QGraphicsRectItem):
         self._hold_color = hold_color
         self.update()
 
+    def set_visual_style(
+        self,
+        *,
+        active_layer_text_color: QColor,
+        tap_fill_color: QColor,
+        hold_fill_color: QColor,
+        tap_border_color: QColor,
+        hold_border_color: QColor,
+        hid_border_color: QColor,
+        grid_line_color: QColor,
+        tap_border_width: float,
+        hold_border_width: float,
+        hid_border_width: float,
+        grid_line_width: float,
+        hid_border_inset: float,
+        hid_border_style: Qt.PenStyle,
+    ) -> None:
+        """Set configurable visual style for pressed/grid states."""
+        self._active_layer_text_color = QColor(active_layer_text_color)
+        self._tap_fill_color = QColor(tap_fill_color)
+        self._hold_fill_color = QColor(hold_fill_color)
+        self._tap_border_color = QColor(tap_border_color)
+        self._hold_border_color = QColor(hold_border_color)
+        self._hid_border_color = QColor(hid_border_color)
+        self._grid_line_color = QColor(grid_line_color)
+        self._tap_border_width = float(tap_border_width)
+        self._hold_border_width = float(hold_border_width)
+        self._hid_border_width = float(hid_border_width)
+        self._grid_line_width = float(grid_line_width)
+        self._hid_border_inset = float(hid_border_inset)
+        self._hid_border_style = hid_border_style
+        self._update_appearance()
+        self.update()
+
+    def set_font_scales(self, label_scale: float, grid_scale: float) -> None:
+        """Set font scaling factors for single-layer and grid labels."""
+        self._label_font_scale = label_scale
+        self._grid_label_font_scale = grid_scale
+        self.update()
+
     def set_label(self, label: str) -> None:
         """Set the display label for this key (legacy, creates KeyLabels)."""
         self._labels = KeyLabels(tap=label, hold="", raw=label)
@@ -214,23 +272,45 @@ class KeyItem(QGraphicsRectItem):
         self._full_keycode = keycode
         self.setToolTip(keycode)
 
-    def set_pressed(self, pressed: bool, hold_mode: bool = False) -> None:
+    def set_pressed(
+        self,
+        pressed: bool,
+        hold_mode: bool = False,
+        layer_index: int | None = None,
+    ) -> None:
         """Set the pressed state of this key.
 
         Args:
             pressed: Whether the key is pressed
             hold_mode: True if this is a hold action (modifier sent), False for tap
+            layer_index: Active layer to highlight in multi-layer view
         """
-        if self._pressed != pressed or self._hold_mode != hold_mode:
+        effective_layer_index = layer_index if pressed else None
+        if (
+            self._pressed != pressed
+            or self._hold_mode != hold_mode
+            or self._pressed_layer_index != effective_layer_index
+        ):
             self._pressed = pressed
             self._hold_mode = hold_mode if pressed else False
+            self._pressed_layer_index = effective_layer_index
             self._update_appearance()
             self.update()
+
+    def get_pressed_layer_index(self) -> int | None:
+        """Return the currently highlighted multi-layer cell, if any."""
+        return self._pressed_layer_index
 
     def set_hid_active(self, active: bool) -> None:
         """Set whether this key should show a firmware/HID contour."""
         if self._hid_active != active:
             self._hid_active = active
+            self.update()
+
+    def set_observed_active_layer(self, layer_index: int | None) -> None:
+        """Set the layer currently considered active for multi-layer diagnostics."""
+        if self._observed_active_layer_index != layer_index:
+            self._observed_active_layer_index = layer_index
             self.update()
 
     def set_tutor_feedback(self, outcome: str | None) -> None:
@@ -256,7 +336,8 @@ class KeyItem(QGraphicsRectItem):
             painter.setPen(self.pen())
             painter.drawRoundedRect(rect, 4, 4)
             if self._hid_active:
-                hid_pen = QPen(self.COLOR_BORDER_HID, 2)
+                hid_pen = QPen(self._hid_border_color, self._hid_border_width)
+                hid_pen.setStyle(self._hid_border_style)
                 painter.setBrush(Qt.NoBrush)
                 painter.setPen(hid_pen)
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 4, 4)
@@ -296,9 +377,15 @@ class KeyItem(QGraphicsRectItem):
                 cell_height
             )
 
+            cell_bg_color = QColor(bg_color)
+            if self._pressed and self._pressed_layer_index == layer_idx:
+                cell_bg_color = QColor(self._hold_fill_color if self._hold_mode else self._tap_fill_color)
+                if self._overlay_mode:
+                    cell_bg_color.setAlpha(180)
+
             # Draw cell background
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QBrush(bg_color))
+            painter.setBrush(QBrush(cell_bg_color))
 
             # Round corners only for corner cells
             if i == 0:  # Top-left
@@ -313,10 +400,16 @@ class KeyItem(QGraphicsRectItem):
                 painter.drawRect(cell_rect)
 
             # Draw cell label
-            self._paint_cell_label(painter, cell_rect, labels)
+            self._paint_cell_label(
+                painter,
+                cell_rect,
+                labels,
+                layer_idx,
+                active=(layer_idx == self._observed_active_layer_index),
+            )
 
         # Draw grid lines
-        painter.setPen(QPen(self.COLOR_BORDER, 0.5))
+        painter.setPen(QPen(self._grid_line_color, self._grid_line_width))
         for i in range(1, grid_size):
             # Vertical lines
             x = rect.x() + i * cell_width
@@ -325,7 +418,86 @@ class KeyItem(QGraphicsRectItem):
             y = rect.y() + i * cell_height
             painter.drawLine(int(rect.x() + 2), int(y), int(rect.right() - 2), int(y))
 
-    def _paint_cell_label(self, painter: QPainter, rect: QRectF, labels: KeyLabels) -> None:
+        if self._pressed and self._pressed_layer_index is not None:
+            self._paint_pressed_grid_cell_border(painter, rect, grid_size)
+        if self._hid_active:
+            self._paint_hid_grid_cell_border(painter, rect, grid_size)
+
+    def _paint_pressed_grid_cell_border(self, painter: QPainter, rect: QRectF, grid_size: int) -> None:
+        """Draw a highlighted border only around the active multi-layer cell."""
+        if not self._multi_layer_data or self._pressed_layer_index is None:
+            return
+
+        active_cell_index = self._find_grid_cell_index(self._pressed_layer_index)
+        if active_cell_index is None:
+            return
+
+        cell_width = rect.width() / grid_size
+        cell_height = rect.height() / grid_size
+        row = active_cell_index // grid_size
+        col = active_cell_index % grid_size
+        cell_rect = QRectF(
+            rect.x() + col * cell_width,
+            rect.y() + row * cell_height,
+            cell_width,
+            cell_height,
+        ).adjusted(1.5, 1.5, -1.5, -1.5)
+
+        border_color = self._hold_border_color if self._hold_mode else self._tap_border_color
+        painter.setBrush(Qt.NoBrush)
+        border_width = self._hold_border_width if self._hold_mode else self._tap_border_width
+        painter.setPen(QPen(border_color, border_width))
+        painter.drawRect(cell_rect)
+
+    def _paint_hid_grid_cell_border(self, painter: QPainter, rect: QRectF, grid_size: int) -> None:
+        """Draw a HID-specific inner border around the active multi-layer cell."""
+        if not self._multi_layer_data:
+            return
+
+        target_layer = self._pressed_layer_index
+        if target_layer is None:
+            target_layer = self._observed_active_layer_index
+        if target_layer is None:
+            return
+
+        active_cell_index = self._find_grid_cell_index(target_layer)
+        if active_cell_index is None:
+            return
+
+        cell_width = rect.width() / grid_size
+        cell_height = rect.height() / grid_size
+        row = active_cell_index // grid_size
+        col = active_cell_index % grid_size
+        cell_rect = QRectF(
+            rect.x() + col * cell_width,
+            rect.y() + row * cell_height,
+            cell_width,
+            cell_height,
+        ).adjusted(self._hid_border_inset, self._hid_border_inset, -self._hid_border_inset, -self._hid_border_inset)
+
+        painter.setBrush(Qt.NoBrush)
+        hid_pen = QPen(self._hid_border_color, self._hid_border_width)
+        hid_pen.setStyle(self._hid_border_style)
+        painter.setPen(hid_pen)
+        painter.drawRect(cell_rect)
+
+    def _find_grid_cell_index(self, layer_index: int | None) -> int | None:
+        """Return the grid cell index for a given layer."""
+        if not self._multi_layer_data or layer_index is None:
+            return None
+        for i, (candidate_layer, _, _) in enumerate(self._multi_layer_data):
+            if candidate_layer == layer_index:
+                return i
+        return None
+
+    def _paint_cell_label(
+        self,
+        painter: QPainter,
+        rect: QRectF,
+        labels: KeyLabels,
+        layer_index: int,
+        active: bool = False,
+    ) -> None:
         """Paint label inside a grid cell (tap hold format)."""
         if not labels.tap and not labels.hold:
             return
@@ -337,13 +509,22 @@ class KeyItem(QGraphicsRectItem):
             display_text = labels.tap
 
         # Use smaller font for grid cells
-        base_size = 8
+        base_size = max(1, round(8 * self._grid_label_font_scale))
         font = QFont("Segoe UI", base_size)
-        font_size = self._calculate_font_size(display_text, font, rect, min_size=5)
+        font_size = self._calculate_font_size(display_text, font, rect, min_size=1)
         font.setPointSize(font_size)
         painter.setFont(font)
 
         # Draw with different colors for tap and hold
+        hold_text_color = self._hold_color
+        if self._pressed and self._hold_mode and layer_index == self._pressed_layer_index:
+            hold_bg = QColor(self._hold_fill_color)
+            hold_text_color = QColor(
+                255 - hold_bg.red(),
+                255 - hold_bg.green(),
+                255 - hold_bg.blue(),
+            )
+
         if labels.hold:
             # Need to draw tap and hold separately with different colors
             metrics = QFontMetrics(font)
@@ -357,15 +538,15 @@ class KeyItem(QGraphicsRectItem):
             text_y = rect.y() + rect.height() / 2 + metrics.ascent() / 2 - 2
 
             # Draw tap
-            painter.setPen(self._tap_color)
+            painter.setPen(self._active_layer_text_color if active else self._tap_color)
             painter.drawText(int(start_x), int(text_y), labels.tap)
 
             # Draw hold
-            painter.setPen(self._hold_color)
+            painter.setPen(self._active_layer_text_color if active else hold_text_color)
             painter.drawText(int(start_x + tap_width + space_width), int(text_y), labels.hold)
         else:
             # Just tap, centered
-            painter.setPen(self._tap_color)
+            painter.setPen(self._active_layer_text_color if active else self._tap_color)
             painter.drawText(rect, Qt.AlignCenter, labels.tap)
 
     def _paint_single_layer_label(self, painter: QPainter, rect: QRectF) -> None:
@@ -383,7 +564,8 @@ class KeyItem(QGraphicsRectItem):
             display_text = self._labels.tap
 
         # Calculate font size
-        font = QFont("Segoe UI", 11)
+        base_size = max(6, round(11 * self._label_font_scale))
+        font = QFont("Segoe UI", base_size)
         font_size = self._calculate_font_size(display_text, font, rect)
         font.setPointSize(font_size)
         painter.setFont(font)

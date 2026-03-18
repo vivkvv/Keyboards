@@ -88,6 +88,7 @@ class KeyboardWidget(QGraphicsView):
 
         # Display mode: single layer index or list of layer indices
         self._display_layers: list[int] = [0]
+        self._observed_active_layer: int | None = None
 
         # Layer colors (can be customized)
         self._layer_colors: list[str] = self.DEFAULT_LAYER_COLORS.copy()
@@ -95,6 +96,21 @@ class KeyboardWidget(QGraphicsView):
         # Text colors
         self._tap_color = QColor("#ffffff")
         self._hold_color = QColor("#ffb74d")
+        self._active_layer_text_color = QColor("#000000")
+        self._tap_fill_color = QColor("#4fc3f7")
+        self._hold_fill_color = QColor("#ffb74d")
+        self._tap_border_color = QColor("#81d4fa")
+        self._hold_border_color = QColor("#ffd180")
+        self._hid_border_color = QColor("#ffffff")
+        self._grid_line_color = QColor("#5c5c5c")
+        self._tap_border_width = 2.0
+        self._hold_border_width = 2.0
+        self._hid_border_width = 2.0
+        self._grid_line_width = 1.0
+        self._hid_border_inset = 4.0
+        self._hid_border_style = Qt.PenStyle.SolidLine
+        self._label_font_scale = 1.0
+        self._grid_label_font_scale = 1.0
 
         # Parser for keycodes
         self._parser = QMKKeycodeParser()
@@ -178,6 +194,16 @@ class KeyboardWidget(QGraphicsView):
         self._display_layers = layer_indices if layer_indices else [0]
         self._update_labels()
 
+    def set_observed_active_layer(self, layer_index: int | None) -> None:
+        """Set the currently observed active layer for multi-layer diagnostics."""
+        self._observed_active_layer = layer_index
+        self._debug_log(
+            f"KeyboardWidget.set_observed_active_layer layer={layer_index} "
+            f"display_layers={self._display_layers}"
+        )
+        for item in self._key_items.values():
+            item.set_observed_active_layer(layer_index)
+
     def set_layer_colors(self, colors: list[str]) -> None:
         """Set custom layer colors."""
         self._layer_colors = colors
@@ -189,6 +215,67 @@ class KeyboardWidget(QGraphicsView):
         # Update existing key items
         for item in self._key_items.values():
             item.set_text_colors(self._tap_color, self._hold_color)
+
+    def set_visual_style(
+        self,
+        *,
+        active_layer_text_color: str,
+        tap_fill_color: str,
+        hold_fill_color: str,
+        tap_border_color: str,
+        hold_border_color: str,
+        hid_border_color: str,
+        grid_line_color: str,
+        tap_border_width: int,
+        hold_border_width: int,
+        hid_border_width: int,
+        grid_line_width: int,
+        hid_border_inset: int,
+        hid_border_style: str,
+    ) -> None:
+        """Set configurable visual style for key interaction and grid rendering."""
+        style_map = {
+            "solid": Qt.PenStyle.SolidLine,
+            "dash": Qt.PenStyle.DashLine,
+            "dot": Qt.PenStyle.DotLine,
+        }
+        self._active_layer_text_color = QColor(active_layer_text_color)
+        self._tap_fill_color = QColor(tap_fill_color)
+        self._hold_fill_color = QColor(hold_fill_color)
+        self._tap_border_color = QColor(tap_border_color)
+        self._hold_border_color = QColor(hold_border_color)
+        self._hid_border_color = QColor(hid_border_color)
+        self._grid_line_color = QColor(grid_line_color)
+        self._tap_border_width = float(tap_border_width)
+        self._hold_border_width = float(hold_border_width)
+        self._hid_border_width = float(hid_border_width)
+        self._grid_line_width = float(grid_line_width)
+        self._hid_border_inset = float(hid_border_inset)
+        self._hid_border_style = style_map.get(hid_border_style, Qt.PenStyle.SolidLine)
+        for item in self._key_items.values():
+            item.set_visual_style(
+                active_layer_text_color=self._active_layer_text_color,
+                tap_fill_color=self._tap_fill_color,
+                hold_fill_color=self._hold_fill_color,
+                tap_border_color=self._tap_border_color,
+                hold_border_color=self._hold_border_color,
+                hid_border_color=self._hid_border_color,
+                grid_line_color=self._grid_line_color,
+                tap_border_width=self._tap_border_width,
+                hold_border_width=self._hold_border_width,
+                hid_border_width=self._hid_border_width,
+                grid_line_width=self._grid_line_width,
+                hid_border_inset=self._hid_border_inset,
+                hid_border_style=self._hid_border_style,
+            )
+
+    def set_font_scales(self, label_scale: float, grid_scale: float) -> None:
+        """Set font scaling for single-layer and multi-layer labels."""
+        self._label_font_scale = label_scale
+        self._grid_label_font_scale = grid_scale
+        for item in self._key_items.values():
+            item.set_font_scales(self._label_font_scale, self._grid_label_font_scale)
+        self.viewport().update()
 
     def set_show_hold_labels(self, enabled: bool) -> None:
         """Show or hide hold labels such as LT/MT overlays."""
@@ -213,13 +300,20 @@ class KeyboardWidget(QGraphicsView):
         self._rebuild_key_definitions()
         self._update_labels()
 
-    def highlight_key(self, key_index: int, pressed: bool, hold_mode: bool = False) -> None:
+    def highlight_key(
+        self,
+        key_index: int,
+        pressed: bool,
+        hold_mode: bool = False,
+        active_layer: int | None = None,
+    ) -> None:
         """Highlight/unhighlight a key by index with minimum duration.
 
         Args:
             key_index: Index of the key to highlight
             pressed: Whether key is pressed (True) or released (False)
             hold_mode: True if this is a hold action (modifier sent), False for tap
+            active_layer: Layer to highlight inside a multi-layer key cell
         """
         if key_index not in self._key_items:
             return
@@ -231,7 +325,13 @@ class KeyboardWidget(QGraphicsView):
                 del self._highlight_timers[key_index]
 
             # Start with tap mode (blue), unless already known to be hold
-            self._key_items[key_index].set_pressed(True, hold_mode)
+            highlight_layer = self._resolve_highlight_layer(active_layer)
+            self._debug_log(
+                f"KeyboardWidget.highlight_key press idx={key_index} hold_mode={hold_mode} "
+                f"active_layer={active_layer} resolved_layer={highlight_layer} "
+                f"display_layers={self._display_layers} observed_active={self._observed_active_layer}"
+            )
+            self._key_items[key_index].set_pressed(True, hold_mode, highlight_layer)
 
             # If not already in hold mode and key has hold functionality, start timer
             if not hold_mode and key_index in self._tap_hold_keys:
@@ -246,6 +346,10 @@ class KeyboardWidget(QGraphicsView):
                 self._hold_timers[key_index] = timer
                 timer.start(self.TAPPING_TERM_MS)
         else:
+            self._debug_log(
+                f"KeyboardWidget.highlight_key release idx={key_index} "
+                f"display_layers={self._display_layers}"
+            )
             # Cancel hold timer on release
             if key_index in self._hold_timers:
                 self._hold_timers[key_index].stop()
@@ -265,7 +369,16 @@ class KeyboardWidget(QGraphicsView):
         if key_index in self._key_items:
             item = self._key_items[key_index]
             if item._pressed:  # Only if still pressed
-                item.set_pressed(True, hold_mode=True)
+                self._debug_log(
+                    f"KeyboardWidget.switch_to_hold_mode state idx={key_index} "
+                    f"pressed_layer={item.get_pressed_layer_index()} "
+                    f"display_layers={self._display_layers} observed_active={self._observed_active_layer}"
+                )
+                item.set_pressed(
+                    True,
+                    hold_mode=True,
+                    layer_index=item.get_pressed_layer_index(),
+                )
         if key_index in self._hold_timers:
             del self._hold_timers[key_index]
 
@@ -478,6 +591,23 @@ class KeyboardWidget(QGraphicsView):
 
             # Set text colors
             item.set_text_colors(self._tap_color, self._hold_color)
+            item.set_visual_style(
+                active_layer_text_color=self._active_layer_text_color,
+                tap_fill_color=self._tap_fill_color,
+                hold_fill_color=self._hold_fill_color,
+                tap_border_color=self._tap_border_color,
+                hold_border_color=self._hold_border_color,
+                hid_border_color=self._hid_border_color,
+                grid_line_color=self._grid_line_color,
+                tap_border_width=self._tap_border_width,
+                hold_border_width=self._hold_border_width,
+                hid_border_width=self._hid_border_width,
+                grid_line_width=self._grid_line_width,
+                hid_border_inset=self._hid_border_inset,
+                hid_border_style=self._hid_border_style,
+            )
+            item.set_font_scales(self._label_font_scale, self._grid_label_font_scale)
+            item.set_observed_active_layer(self._observed_active_layer)
 
             if is_multi_layer:
                 # Multi-layer grid mode
@@ -496,6 +626,14 @@ class KeyboardWidget(QGraphicsView):
                 labels = self._display_label(defn.get_labels(layer_idx))
                 if labels:
                     item.set_labels(labels)
+
+    def _resolve_highlight_layer(self, active_layer: int | None) -> int | None:
+        """Return which layer cell should be highlighted in the current view."""
+        if len(self._display_layers) <= 1:
+            return None
+        if active_layer in self._display_layers:
+            return active_layer
+        return self._display_layers[0] if self._display_layers else None
 
     def _display_label(self, labels: KeyLabels | None) -> KeyLabels | None:
         """Return labels adjusted for current display options."""

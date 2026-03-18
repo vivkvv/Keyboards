@@ -666,6 +666,11 @@ class SettingsDialog(QDialog):
         self._language_sound_bindings = config.get_language_sound_bindings()
         self._tutor_scheme_widget = TutorSchemeAssignmentWidget(layout_variant, keymap, self)
         self._on_apply = on_apply
+        self._hid_border_style_options = {
+            "Solid": "solid",
+            "Dashed": "dash",
+            "Dotted": "dot",
+        }
 
         self.setWindowTitle("Settings")
         self.setMinimumWidth(700)
@@ -699,6 +704,20 @@ class SettingsDialog(QDialog):
         self._hold_color_btn = ColorButton(config.get_hold_color())
         text_layout.addRow("Hold:", self._hold_color_btn)
 
+        self._label_font_scale_spin = QSpinBox()
+        self._label_font_scale_spin.setRange(50, 200)
+        self._label_font_scale_spin.setSingleStep(5)
+        self._label_font_scale_spin.setSuffix(" %")
+        self._label_font_scale_spin.setValue(config.get_label_font_scale_percent())
+        text_layout.addRow("Label size:", self._label_font_scale_spin)
+
+        self._grid_label_font_scale_spin = QSpinBox()
+        self._grid_label_font_scale_spin.setRange(1, 200)
+        self._grid_label_font_scale_spin.setSingleStep(5)
+        self._grid_label_font_scale_spin.setSuffix(" %")
+        self._grid_label_font_scale_spin.setValue(config.get_grid_label_font_scale_percent())
+        text_layout.addRow("All Layers size:", self._grid_label_font_scale_spin)
+
         self._tutor_show_hold_labels_cb = QCheckBox("Show hold labels in tutor")
         self._tutor_show_hold_labels_cb.setChecked(config.get_tutor_show_hold_labels())
         text_layout.addRow("", self._tutor_show_hold_labels_cb)
@@ -707,6 +726,79 @@ class SettingsDialog(QDialog):
         text_tab_layout.addWidget(text_group)
         text_tab_layout.addStretch()
         tabs.addTab(text_tab, "Text")
+
+        interaction_group = QGroupBox("Press / Hold")
+        interaction_layout = QFormLayout(interaction_group)
+
+        self._tap_fill_color_btn = ColorButton(config.get_tap_fill_color())
+        interaction_layout.addRow("Tap fill:", self._tap_fill_color_btn)
+
+        self._hold_fill_color_btn = ColorButton(config.get_hold_fill_color())
+        interaction_layout.addRow("Hold fill:", self._hold_fill_color_btn)
+
+        self._tap_border_color_btn = ColorButton(config.get_tap_border_color())
+        interaction_layout.addRow("Tap border:", self._tap_border_color_btn)
+
+        self._hold_border_color_btn = ColorButton(config.get_hold_border_color())
+        interaction_layout.addRow("Hold border:", self._hold_border_color_btn)
+
+        self._tap_border_width_spin = QSpinBox()
+        self._tap_border_width_spin.setRange(1, 8)
+        self._tap_border_width_spin.setValue(config.get_tap_border_width())
+        interaction_layout.addRow("Tap border width:", self._tap_border_width_spin)
+
+        self._hold_border_width_spin = QSpinBox()
+        self._hold_border_width_spin.setRange(1, 8)
+        self._hold_border_width_spin.setValue(config.get_hold_border_width())
+        interaction_layout.addRow("Hold border width:", self._hold_border_width_spin)
+
+        interaction_tab = QWidget()
+        interaction_tab_layout = QVBoxLayout(interaction_tab)
+        interaction_tab_layout.addWidget(interaction_group)
+        interaction_tab_layout.addStretch()
+        tabs.addTab(interaction_tab, "Interaction")
+
+        grid_group = QGroupBox("All Layers / Grid")
+        grid_layout = QFormLayout(grid_group)
+
+        self._active_layer_text_color_btn = ColorButton(config.get_active_layer_text_color())
+        grid_layout.addRow("Active layer text:", self._active_layer_text_color_btn)
+
+        self._grid_line_color_btn = ColorButton(config.get_grid_line_color())
+        grid_layout.addRow("Grid line color:", self._grid_line_color_btn)
+
+        self._grid_line_width_spin = QSpinBox()
+        self._grid_line_width_spin.setRange(1, 6)
+        self._grid_line_width_spin.setValue(config.get_grid_line_width())
+        grid_layout.addRow("Grid line width:", self._grid_line_width_spin)
+
+        self._hid_border_color_btn = ColorButton(config.get_hid_border_color())
+        grid_layout.addRow("HID border color:", self._hid_border_color_btn)
+
+        self._hid_border_width_spin = QSpinBox()
+        self._hid_border_width_spin.setRange(1, 6)
+        self._hid_border_width_spin.setValue(config.get_hid_border_width())
+        grid_layout.addRow("HID border width:", self._hid_border_width_spin)
+
+        self._hid_border_inset_spin = QSpinBox()
+        self._hid_border_inset_spin.setRange(0, 12)
+        self._hid_border_inset_spin.setValue(config.get_hid_border_inset())
+        grid_layout.addRow("HID inset:", self._hid_border_inset_spin)
+
+        self._hid_border_style_combo = QComboBox()
+        for label, value in self._hid_border_style_options.items():
+            self._hid_border_style_combo.addItem(label, value)
+        current_hid_style = config.get_hid_border_style()
+        current_hid_style_index = self._hid_border_style_combo.findData(current_hid_style)
+        if current_hid_style_index >= 0:
+            self._hid_border_style_combo.setCurrentIndex(current_hid_style_index)
+        grid_layout.addRow("HID line style:", self._hid_border_style_combo)
+
+        grid_tab = QWidget()
+        grid_tab_layout = QVBoxLayout(grid_tab)
+        grid_tab_layout.addWidget(grid_group)
+        grid_tab_layout.addStretch()
+        tabs.addTab(grid_tab, "All Layers")
 
         tutor_group = QGroupBox("Tutor Finger Colors")
         tutor_layout = QFormLayout(tutor_group)
@@ -850,7 +942,22 @@ class SettingsDialog(QDialog):
 
         self._tap_color_btn.set_color(Config.DEFAULT_TAP_COLOR)
         self._hold_color_btn.set_color(Config.DEFAULT_HOLD_COLOR)
+        self._active_layer_text_color_btn.set_color(Config.DEFAULT_ACTIVE_LAYER_TEXT_COLOR)
         self._tutor_show_hold_labels_cb.setChecked(Config.DEFAULT_TUTOR_SHOW_HOLD_LABELS)
+        self._tap_fill_color_btn.set_color(Config.DEFAULT_TAP_FILL_COLOR)
+        self._hold_fill_color_btn.set_color(Config.DEFAULT_HOLD_FILL_COLOR)
+        self._tap_border_color_btn.set_color(Config.DEFAULT_TAP_BORDER_COLOR)
+        self._hold_border_color_btn.set_color(Config.DEFAULT_HOLD_BORDER_COLOR)
+        self._tap_border_width_spin.setValue(Config.DEFAULT_TAP_BORDER_WIDTH)
+        self._hold_border_width_spin.setValue(Config.DEFAULT_HOLD_BORDER_WIDTH)
+        self._grid_line_color_btn.set_color(Config.DEFAULT_GRID_LINE_COLOR)
+        self._grid_line_width_spin.setValue(Config.DEFAULT_GRID_LINE_WIDTH)
+        self._hid_border_color_btn.set_color(Config.DEFAULT_HID_BORDER_COLOR)
+        self._hid_border_width_spin.setValue(Config.DEFAULT_HID_BORDER_WIDTH)
+        self._hid_border_inset_spin.setValue(Config.DEFAULT_HID_BORDER_INSET)
+        hid_style_index = self._hid_border_style_combo.findData(Config.DEFAULT_HID_BORDER_STYLE)
+        if hid_style_index >= 0:
+            self._hid_border_style_combo.setCurrentIndex(hid_style_index)
         for name, color in Config.DEFAULT_FINGER_COLORS.items():
             self._finger_color_buttons[name].set_color(color)
         self._tutor_click_sounds_cb.setChecked(Config.DEFAULT_TUTOR_CLICK_SOUNDS_ENABLED)
@@ -957,6 +1064,21 @@ class SettingsDialog(QDialog):
 
         self._config.set_tap_color(self._tap_color_btn.get_color())
         self._config.set_hold_color(self._hold_color_btn.get_color())
+        self._config.set_active_layer_text_color(self._active_layer_text_color_btn.get_color())
+        self._config.set_label_font_scale_percent(self._label_font_scale_spin.value())
+        self._config.set_grid_label_font_scale_percent(self._grid_label_font_scale_spin.value())
+        self._config.set_tap_fill_color(self._tap_fill_color_btn.get_color())
+        self._config.set_hold_fill_color(self._hold_fill_color_btn.get_color())
+        self._config.set_tap_border_color(self._tap_border_color_btn.get_color())
+        self._config.set_hold_border_color(self._hold_border_color_btn.get_color())
+        self._config.set_tap_border_width(self._tap_border_width_spin.value())
+        self._config.set_hold_border_width(self._hold_border_width_spin.value())
+        self._config.set_grid_line_color(self._grid_line_color_btn.get_color())
+        self._config.set_grid_line_width(self._grid_line_width_spin.value())
+        self._config.set_hid_border_color(self._hid_border_color_btn.get_color())
+        self._config.set_hid_border_width(self._hid_border_width_spin.value())
+        self._config.set_hid_border_inset(self._hid_border_inset_spin.value())
+        self._config.set_hid_border_style(str(self._hid_border_style_combo.currentData()))
         self._config.set_tutor_show_hold_labels(self._tutor_show_hold_labels_cb.isChecked())
         self._config.set_tutor_show_movement_arrows(self._tutor_movement_arrows_cb.isChecked())
         for name, button in self._finger_color_buttons.items():

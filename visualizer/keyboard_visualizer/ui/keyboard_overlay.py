@@ -104,6 +104,18 @@ class KeyboardOverlayWindow(QWidget):
     def set_layer(self, layer_index: int) -> None:
         self._keyboard_widget.set_layer(layer_index)
 
+    def set_layer_colors(self, colors: list[str]) -> None:
+        self._keyboard_widget.set_layer_colors(colors)
+
+    def set_text_colors(self, tap_color: str, hold_color: str) -> None:
+        self._keyboard_widget.set_text_colors(tap_color, hold_color)
+
+    def set_visual_style(self, **kwargs) -> None:
+        self._keyboard_widget.set_visual_style(**kwargs)
+
+    def set_font_scales(self, label_scale: float, grid_scale: float) -> None:
+        self._keyboard_widget.set_font_scales(label_scale, grid_scale)
+
     def set_keyboard_view_state(self, size, transform) -> None:
         self._mirrored_keyboard_transform = transform
         self._keyboard_widget.setMinimumSize(size)
@@ -119,8 +131,17 @@ class KeyboardOverlayWindow(QWidget):
     def set_caps_lock_mode(self, caps_lock_on: bool) -> None:
         self._keyboard_widget.set_caps_lock_mode(caps_lock_on)
 
-    def highlight_key(self, key_index: int, pressed: bool, hold_mode: bool = False) -> None:
-        self._keyboard_widget.highlight_key(key_index, pressed, hold_mode)
+    def set_observed_active_layer(self, layer_index: int | None) -> None:
+        self._keyboard_widget.set_observed_active_layer(layer_index)
+
+    def highlight_key(
+        self,
+        key_index: int,
+        pressed: bool,
+        hold_mode: bool = False,
+        active_layer: int | None = None,
+    ) -> None:
+        self._keyboard_widget.highlight_key(key_index, pressed, hold_mode, active_layer)
 
     def set_hid_key_active(self, key_index: int, active: bool) -> None:
         self._keyboard_widget.set_hid_key_active(key_index, active)

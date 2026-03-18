@@ -64,8 +64,23 @@ class Config:
 
     DEFAULT_TAP_COLOR = "#ffffff"
     DEFAULT_HOLD_COLOR = "#ffb74d"
+    DEFAULT_ACTIVE_LAYER_TEXT_COLOR = "#000000"
+    DEFAULT_LABEL_FONT_SCALE_PERCENT = 100
+    DEFAULT_GRID_LABEL_FONT_SCALE_PERCENT = 100
     DEFAULT_HID_HIGHLIGHT_COLOR = "#ff0000"
     DEFAULT_HID_HIGHLIGHT_DURATION_MS = 1000
+    DEFAULT_TAP_FILL_COLOR = "#4fc3f7"
+    DEFAULT_HOLD_FILL_COLOR = "#ffb74d"
+    DEFAULT_TAP_BORDER_COLOR = "#81d4fa"
+    DEFAULT_HOLD_BORDER_COLOR = "#ffd180"
+    DEFAULT_HID_BORDER_COLOR = "#ffffff"
+    DEFAULT_GRID_LINE_COLOR = "#5c5c5c"
+    DEFAULT_TAP_BORDER_WIDTH = 2
+    DEFAULT_HOLD_BORDER_WIDTH = 2
+    DEFAULT_HID_BORDER_WIDTH = 2
+    DEFAULT_GRID_LINE_WIDTH = 1
+    DEFAULT_HID_BORDER_INSET = 4
+    DEFAULT_HID_BORDER_STYLE = "solid"
     DEFAULT_TUTOR_SHOW_HOLD_LABELS = True
     DEFAULT_TUTOR_SHOW_MOVEMENT_ARROWS = False
     DEFAULT_TUTOR_CLICK_SOUNDS_ENABLED = False
@@ -102,6 +117,33 @@ class Config:
         """Save config to file."""
         with open(self._path, "w", encoding="utf-8") as f:
             self._config.write(f)
+
+    def _get_visual_color(self, key: str, default: str) -> str:
+        return self._config.get("visual_style", key, fallback=default)
+
+    def _set_visual_color(self, key: str, value: str) -> None:
+        if "visual_style" not in self._config:
+            self._config["visual_style"] = {}
+        self._config["visual_style"][key] = value
+        self.save()
+
+    def _get_visual_int(self, key: str, default: int) -> int:
+        return self._config.getint("visual_style", key, fallback=default)
+
+    def _set_visual_int(self, key: str, value: int) -> None:
+        if "visual_style" not in self._config:
+            self._config["visual_style"] = {}
+        self._config["visual_style"][key] = str(value)
+        self.save()
+
+    def _get_visual_str(self, key: str, default: str) -> str:
+        return self._config.get("visual_style", key, fallback=default)
+
+    def _set_visual_str(self, key: str, value: str) -> None:
+        if "visual_style" not in self._config:
+            self._config["visual_style"] = {}
+        self._config["visual_style"][key] = value
+        self.save()
 
     def _config_dir(self) -> Path:
         return self._path.resolve().parent
@@ -442,6 +484,144 @@ class Config:
             self._config["text_colors"] = {}
         self._config["text_colors"]["hold"] = color
         self.save()
+
+    def get_label_font_scale_percent(self) -> int:
+        """Get font scale for normal key labels."""
+        return self._config.getint(
+            "text_colors",
+            "label_font_scale_percent",
+            fallback=self.DEFAULT_LABEL_FONT_SCALE_PERCENT,
+        )
+
+    def set_label_font_scale_percent(self, value: int) -> None:
+        """Set font scale for normal key labels."""
+        if "text_colors" not in self._config:
+            self._config["text_colors"] = {}
+        self._config["text_colors"]["label_font_scale_percent"] = str(value)
+        self.save()
+
+    def get_grid_label_font_scale_percent(self) -> int:
+        """Get font scale for multi-layer grid labels."""
+        return self._config.getint(
+            "text_colors",
+            "grid_label_font_scale_percent",
+            fallback=self.DEFAULT_GRID_LABEL_FONT_SCALE_PERCENT,
+        )
+
+    def set_grid_label_font_scale_percent(self, value: int) -> None:
+        """Set font scale for multi-layer grid labels."""
+        if "text_colors" not in self._config:
+            self._config["text_colors"] = {}
+        self._config["text_colors"]["grid_label_font_scale_percent"] = str(value)
+        self.save()
+
+    def get_active_layer_text_color(self) -> str:
+        """Get text color for the observed active layer in multi-layer views."""
+        return self._get_visual_color("active_layer_text_color", self.DEFAULT_ACTIVE_LAYER_TEXT_COLOR)
+
+    def set_active_layer_text_color(self, color: str) -> None:
+        """Set text color for the observed active layer in multi-layer views."""
+        self._set_visual_color("active_layer_text_color", color)
+
+    def get_tap_fill_color(self) -> str:
+        """Get tap fill color."""
+        return self._get_visual_color("tap_fill_color", self.DEFAULT_TAP_FILL_COLOR)
+
+    def set_tap_fill_color(self, color: str) -> None:
+        """Set tap fill color."""
+        self._set_visual_color("tap_fill_color", color)
+
+    def get_hold_fill_color(self) -> str:
+        """Get hold fill color."""
+        return self._get_visual_color("hold_fill_color", self.DEFAULT_HOLD_FILL_COLOR)
+
+    def set_hold_fill_color(self, color: str) -> None:
+        """Set hold fill color."""
+        self._set_visual_color("hold_fill_color", color)
+
+    def get_tap_border_color(self) -> str:
+        """Get tap border color."""
+        return self._get_visual_color("tap_border_color", self.DEFAULT_TAP_BORDER_COLOR)
+
+    def set_tap_border_color(self, color: str) -> None:
+        """Set tap border color."""
+        self._set_visual_color("tap_border_color", color)
+
+    def get_hold_border_color(self) -> str:
+        """Get hold border color."""
+        return self._get_visual_color("hold_border_color", self.DEFAULT_HOLD_BORDER_COLOR)
+
+    def set_hold_border_color(self, color: str) -> None:
+        """Set hold border color."""
+        self._set_visual_color("hold_border_color", color)
+
+    def get_hid_border_color(self) -> str:
+        """Get HID border color."""
+        return self._get_visual_color("hid_border_color", self.DEFAULT_HID_BORDER_COLOR)
+
+    def set_hid_border_color(self, color: str) -> None:
+        """Set HID border color."""
+        self._set_visual_color("hid_border_color", color)
+
+    def get_grid_line_color(self) -> str:
+        """Get grid line color for multi-layer view."""
+        return self._get_visual_color("grid_line_color", self.DEFAULT_GRID_LINE_COLOR)
+
+    def set_grid_line_color(self, color: str) -> None:
+        """Set grid line color for multi-layer view."""
+        self._set_visual_color("grid_line_color", color)
+
+    def get_tap_border_width(self) -> int:
+        """Get tap border width."""
+        return self._get_visual_int("tap_border_width", self.DEFAULT_TAP_BORDER_WIDTH)
+
+    def set_tap_border_width(self, value: int) -> None:
+        """Set tap border width."""
+        self._set_visual_int("tap_border_width", max(1, value))
+
+    def get_hold_border_width(self) -> int:
+        """Get hold border width."""
+        return self._get_visual_int("hold_border_width", self.DEFAULT_HOLD_BORDER_WIDTH)
+
+    def set_hold_border_width(self, value: int) -> None:
+        """Set hold border width."""
+        self._set_visual_int("hold_border_width", max(1, value))
+
+    def get_hid_border_width(self) -> int:
+        """Get HID border width."""
+        return self._get_visual_int("hid_border_width", self.DEFAULT_HID_BORDER_WIDTH)
+
+    def set_hid_border_width(self, value: int) -> None:
+        """Set HID border width."""
+        self._set_visual_int("hid_border_width", max(1, value))
+
+    def get_grid_line_width(self) -> int:
+        """Get grid line width for multi-layer view."""
+        return self._get_visual_int("grid_line_width", self.DEFAULT_GRID_LINE_WIDTH)
+
+    def set_grid_line_width(self, value: int) -> None:
+        """Set grid line width for multi-layer view."""
+        self._set_visual_int("grid_line_width", max(1, value))
+
+    def get_hid_border_inset(self) -> int:
+        """Get HID border inset for multi-layer cells."""
+        return self._get_visual_int("hid_border_inset", self.DEFAULT_HID_BORDER_INSET)
+
+    def set_hid_border_inset(self, value: int) -> None:
+        """Set HID border inset for multi-layer cells."""
+        self._set_visual_int("hid_border_inset", max(0, value))
+
+    def get_hid_border_style(self) -> str:
+        """Get HID border style."""
+        value = self._get_visual_str("hid_border_style", self.DEFAULT_HID_BORDER_STYLE).lower()
+        return value if value in {"solid", "dash", "dot"} else self.DEFAULT_HID_BORDER_STYLE
+
+    def set_hid_border_style(self, value: str) -> None:
+        """Set HID border style."""
+        clean = (value or self.DEFAULT_HID_BORDER_STYLE).lower()
+        if clean not in {"solid", "dash", "dot"}:
+            clean = self.DEFAULT_HID_BORDER_STYLE
+        self._set_visual_str("hid_border_style", clean)
 
     # Custom layer views
     def get_custom_views(self) -> list[LayerViewConfig]:
