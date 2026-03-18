@@ -757,6 +757,7 @@ class MainWindow(QMainWindow):
             )
             self._tutor_overlay.set_stats_context(self._stats_db, self._tutor_user)
             self._tutor_overlay.set_course(self._tutor_course_id)
+            self._tutor_overlay.set_debug_log_callback(self._debug_panel.log)
 
             # Always enable OS layout mode for tutor (so keys show correct characters)
             self._apply_auxiliary_os_layout_state(self._tutor_overlay, True)
@@ -1989,6 +1990,7 @@ class MainWindow(QMainWindow):
                 self._config.get_tutor_lesson_start_sound(),
                 self._config.get_tutor_lesson_complete_sound(),
             )
+            self._tutor_overlay.set_debug_log_callback(self._debug_panel.log)
         self._keyboard_widget.set_show_finger_movement_arrows(
             self._config.get_tutor_show_movement_arrows()
         )

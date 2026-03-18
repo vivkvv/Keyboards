@@ -5,9 +5,11 @@ from typing import Optional, Callable
 from dataclasses import dataclass, field
 import time
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QProgressBar
-from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics
-from PySide6.QtCore import Qt, Signal, QRect
+from html import escape
+
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QProgressBar, QTextBrowser
+from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QTextCursor, QTextDocument
+from PySide6.QtCore import Qt, Signal, QRect, QTimer
 
 
 class ErrorMode(Enum):
@@ -96,6 +98,7 @@ class TypingTextWidget(QWidget):
         self._started_at: Optional[float] = None
         self._completed_at: Optional[float] = None
         self._last_attempt_outcome = AttemptOutcome.IGNORED
+        self._cursor_visible = True
 
         # Callback to get key index for a character
         self._char_to_key: Optional[Callable[[str], Optional[int]]] = None
@@ -114,6 +117,10 @@ class TypingTextWidget(QWidget):
         self.setMinimumHeight(80)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAutoFillBackground(False)
+        self._cursor_timer = QTimer(self)
+        self._cursor_timer.setInterval(500)
+        self._cursor_timer.timeout.connect(self._toggle_cursor)
+        self._cursor_timer.start()
 
     def set_text(self, text: str) -> None:
         """Set the text to type."""
@@ -124,6 +131,7 @@ class TypingTextWidget(QWidget):
         self._started_at = None
         self._completed_at = None
         self._last_attempt_outcome = AttemptOutcome.IGNORED
+        self._cursor_visible = True
 
         # Map characters to key indices if callback is set
         if self._char_to_key:
@@ -253,12 +261,27 @@ class TypingTextWidget(QWidget):
         self._started_at = None
         self._completed_at = None
         self._last_attempt_outcome = AttemptOutcome.IGNORED
+        self._cursor_visible = True
         self.update()
         self._emit_current_char()
 
     def get_last_attempt_outcome(self) -> AttemptOutcome:
         """Return the outcome of the most recent keypress attempt."""
         return self._last_attempt_outcome
+
+    def get_render_snapshot(self) -> tuple[str, list[CharState], int]:
+        """Return a lightweight snapshot for alternative renderers."""
+        copied = [
+            CharState(
+                char=state.char,
+                typed=state.typed,
+                correct=state.correct,
+                typed_char=state.typed_char,
+                key_index=state.key_index,
+            )
+            for state in self._char_states
+        ]
+        return self._text, copied, self._current_pos
 
     def _ensure_started(self) -> None:
         """Start lesson timing on the first keypress."""
@@ -282,6 +305,16 @@ class TypingTextWidget(QWidget):
 
         end_time = self._completed_at if self._completed_at is not None else time.monotonic()
         self._stats.elapsed_seconds = max(0.0, end_time - self._started_at)
+
+    def _toggle_cursor(self) -> None:
+        """Blink the current-character cursor."""
+        if self._stats.completed:
+            if self._cursor_visible:
+                self._cursor_visible = False
+                self.update()
+            return
+        self._cursor_visible = not self._cursor_visible
+        self.update()
 
     def paintEvent(self, event) -> None:
         """Paint the text with colored characters."""
@@ -328,9 +361,192 @@ class TypingTextWidget(QWidget):
                 painter.drawText(x, wrong_y, state.typed_char)
                 painter.setFont(self._font)
 
+            if i == self._current_pos and self._cursor_visible:
+                cursor_rect = QRect(x, y + 4, max(2, char_width), 3)
+                painter.fillRect(cursor_rect, QColor("#40c4ff"))
+
             x += char_width
 
         painter.end()
+
+
+class RichTypingTextWidget(QTextBrowser):
+    """Experimental rich-text renderer for tutor text."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._snapshot_text = ""
+        self._snapshot_states: list[CharState] = []
+        self._snapshot_current_pos = 0
+        self._debug_log_callback: Optional[Callable[[str], None]] = None
+        self._last_layout_log_signature: tuple[int, int, int, int] | None = None
+        self._cursor_visible = True
+        self.setReadOnly(True)
+        self.setOpenLinks(False)
+        self.setOpenExternalLinks(False)
+        self.setFrameShape(QTextBrowser.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setStyleSheet(
+            """
+            QTextBrowser {
+                background: transparent;
+                border: 1px solid #303030;
+                border-radius: 6px;
+                padding: 6px;
+            }
+            """
+        )
+        self.document().setDocumentMargin(6)
+        font = QFont("Consolas", 24)
+        font.setBold(True)
+        self.setFont(font)
+        self.setMinimumHeight(150)
+        self.setMaximumHeight(170)
+        self._cursor_timer = QTimer(self)
+        self._cursor_timer.setInterval(500)
+        self._cursor_timer.timeout.connect(self._toggle_cursor)
+        self._cursor_timer.start()
+
+    def sync_from_snapshot(self, text: str, char_states: list[CharState], current_pos: int) -> None:
+        """Render a lesson snapshot using wrapped rich text."""
+        self._snapshot_text = text
+        self._snapshot_states = char_states
+        if current_pos != self._snapshot_current_pos:
+            self._cursor_visible = True
+        self._snapshot_current_pos = current_pos
+        self._rebuild_html()
+
+    def set_debug_log_callback(self, callback: Optional[Callable[[str], None]]) -> None:
+        """Set optional debug logger for layout diagnostics."""
+        self._debug_log_callback = callback
+
+    def resizeEvent(self, event) -> None:
+        """Reflow character blocks on resize."""
+        super().resizeEvent(event)
+        self._rebuild_html()
+
+    def _toggle_cursor(self) -> None:
+        """Blink the current-character cursor."""
+        self._cursor_visible = not self._cursor_visible
+        self._rebuild_html()
+
+    def _rebuild_html(self) -> None:
+        """Rebuild wrapped HTML from the latest snapshot."""
+        states = self._snapshot_states
+        if not states:
+            self.clear()
+            return
+
+        available_width = max(1, self.viewport().width() - 16)
+        columns = self._fit_columns(states, available_width)
+
+        rows: list[list[tuple[int, CharState]]] = []
+        for start in range(0, len(states), columns):
+            chunk = [(index, states[index]) for index in range(start, min(len(states), start + columns))]
+            rows.append(chunk)
+
+        current_index = min(max(self._snapshot_current_pos, 0), max(0, len(states) - 1))
+        current_row = current_index // columns
+        signature = (
+            available_width,
+            columns,
+            len(rows),
+            current_row,
+        )
+        if self._debug_log_callback is not None and signature != self._last_layout_log_signature:
+            self._last_layout_log_signature = signature
+            self._debug_log_callback(
+                "RichTypingTextWidget layout: "
+                f"available_width={available_width} columns={columns} rows={len(rows)} "
+                f"current_pos={self._snapshot_current_pos} current_row={current_row}"
+            )
+
+        html_parts: list[str] = [
+            "<div style='font-family: Consolas, monospace; font-size: 24pt; font-weight: 700;'>"
+        ]
+        for row in rows:
+            html_parts.append(self._build_row_table_html(row))
+        html_parts.append("</div>")
+        self.setHtml("".join(html_parts))
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        self.setTextCursor(cursor)
+        self.scrollToAnchor("current-char")
+
+    @staticmethod
+    def _wrap_cell_span(char_html: str, style: str) -> str:
+        """Wrap one expected character with the desired style."""
+        return f"<span style='{style}'>{char_html}</span>"
+
+    def _fit_columns(self, states: list[CharState], available_width: int) -> int:
+        """Fit the number of columns by measuring actual rendered width."""
+        if not states:
+            return 1
+        low = 1
+        high = len(states)
+        best = 1
+        while low <= high:
+            mid = (low + high) // 2
+            sample_row = [(index, states[index]) for index in range(min(len(states), mid))]
+            row_html = (
+                "<div style='font-family: Consolas, monospace; font-size: 24pt; font-weight: 700;'>"
+                f"{self._build_row_table_html(sample_row)}"
+                "</div>"
+            )
+            if self._measure_html_width(row_html) <= available_width:
+                best = mid
+                low = mid + 1
+            else:
+                high = mid - 1
+        return max(1, best)
+
+    def _measure_html_width(self, html: str) -> float:
+        """Measure rendered document width for a candidate row."""
+        document = QTextDocument()
+        document.setDefaultFont(self.font())
+        document.setDocumentMargin(6)
+        document.setHtml(html)
+        return document.size().width()
+
+    def _build_row_table_html(self, row: list[tuple[int, CharState]]) -> str:
+        """Build a two-row HTML table for one wrapped line."""
+        html_parts: list[str] = [
+            "<table cellspacing='0' cellpadding='0' style='border-collapse:collapse; margin:0 0 6px 0;'>",
+            "<tr>",
+        ]
+        for index, state in row:
+            char_html = "&nbsp;" if state.char == " " else escape(state.char)
+            style = "color:#888888;"
+            if index == self._snapshot_current_pos:
+                style = "color:#000000; background-color:#FFEB3B;"
+            elif state.typed:
+                style = "color:#4CAF50;" if state.correct else "color:#F44336;"
+            anchor = "<a name='current-char'></a>" if index == self._snapshot_current_pos else ""
+            html_parts.append(
+                "<td style='text-align:center; vertical-align:bottom; padding:0 2px 0 2px;'>"
+                f"{anchor}{self._wrap_cell_span(char_html, style)}</td>"
+            )
+        html_parts.append("</tr><tr>")
+        for index, _ in row:
+            is_current_cursor = index == self._snapshot_current_pos and self._cursor_visible
+            html_parts.append(
+                "<td style='text-align:center; vertical-align:top; padding:0 2px 0 2px; "
+                f"border-top: 3px solid {'#40c4ff' if is_current_cursor else 'transparent'};"
+                "font-size:1pt; line-height:0.2; height:4px;'>&nbsp;</td>"
+            )
+        html_parts.append("</tr><tr>")
+        for _, state in row:
+            wrong_html = "&nbsp;"
+            if state.typed_char and state.typed_char != state.char and not state.correct:
+                wrong_html = "&nbsp;" if state.typed_char == " " else escape(state.typed_char)
+            html_parts.append(
+                "<td style='text-align:center; vertical-align:top; padding:0 2px 0 2px; "
+                "color:#F44336; font-size:14pt; font-weight:400;'>"
+                f"{wrong_html}</td>"
+            )
+        html_parts.append("</tr></table>")
+        return "".join(html_parts)
 
 
 class TypingStatsWidget(QWidget):
