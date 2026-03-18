@@ -719,33 +719,14 @@ class MainWindow(QMainWindow):
         """Open a transparent keyboard-only overlay."""
         if self._keyboard_overlay is None or not self._keyboard_overlay.isVisible():
             self._keyboard_overlay = KeyboardOverlayWindow()
-            if self._layout:
-                self._keyboard_overlay.set_layout(self._layout)
-            if self._keymap:
-                self._keyboard_overlay.set_keymap(self._keymap)
-                self._keyboard_overlay.set_layer(self._get_displayed_layer())
-            self._keyboard_overlay.set_keyboard_view_state(
-                self._keyboard_widget.size(),
-                self._keyboard_widget.transform(),
-            )
+            self._initialize_auxiliary_window_base(self._keyboard_overlay)
             self._keyboard_overlay.set_show_hold_labels(self._config.get_tutor_show_hold_labels())
-            self._current_layout_hkl = self._layout_detector.get_current_layout()
-            self._keyboard_overlay.set_os_layout_mode(
-                self._os_layout_mode,
-                self._layout_detector if self._os_layout_mode else None,
-                self._current_layout_hkl if self._os_layout_mode else None,
-            )
-            self._keyboard_overlay.set_caps_lock_mode(self._caps_lock_on)
+            self._apply_auxiliary_os_layout_state(self._keyboard_overlay, self._os_layout_mode)
             self._initialize_auxiliary_keyboard_widget(self._keyboard_overlay.keyboard_widget())
-            if not self._layout_check_timer.isActive():
-                self._layout_check_timer.start()
             self._keyboard_overlay.closed.connect(self._on_keyboard_overlay_closed)
-            self._keyboard_overlay.show()
-            self._debug_panel.log("Keyboard overlay opened")
-            self.hide()
+            self._show_auxiliary_window(self._keyboard_overlay, "Keyboard overlay opened")
         else:
-            self._keyboard_overlay.raise_()
-            self._keyboard_overlay.activateWindow()
+            self._focus_auxiliary_window(self._keyboard_overlay)
 
     def _open_tutor_overlay(self) -> None:
         """Open the typing tutor overlay."""
@@ -754,18 +735,7 @@ class MainWindow(QMainWindow):
         if self._tutor_overlay is None or not self._tutor_overlay.isVisible():
             # Create new tutor overlay
             self._tutor_overlay = TutorOverlayWindow()
-
-            # Copy current layout and keymap
-            if self._layout:
-                self._tutor_overlay.set_layout(self._layout)
-            if self._keymap:
-                self._tutor_overlay.set_keymap(self._keymap)
-                self._tutor_overlay.set_layer(self._get_displayed_layer())
-
-            self._tutor_overlay.set_keyboard_view_state(
-                self._keyboard_widget.size(),
-                self._keyboard_widget.transform(),
-            )
+            self._initialize_auxiliary_window_base(self._tutor_overlay)
             self._tutor_overlay.set_show_hold_labels(self._config.get_tutor_show_hold_labels())
             self._tutor_overlay.set_show_finger_movement_arrows(
                 self._config.get_tutor_show_movement_arrows()
@@ -785,32 +755,19 @@ class MainWindow(QMainWindow):
             self._tutor_overlay.set_course(self._tutor_course_id)
 
             # Always enable OS layout mode for tutor (so keys show correct characters)
-            self._current_layout_hkl = self._layout_detector.get_current_layout()
-            self._tutor_overlay.set_os_layout_mode(
-                True,
-                self._layout_detector,
-                self._current_layout_hkl
-            )
-            self._tutor_overlay.set_caps_lock_mode(self._caps_lock_on)
-
-            # Start layout check timer to detect layout changes
-            if not self._layout_check_timer.isActive():
-                self._layout_check_timer.start()
+            self._apply_auxiliary_os_layout_state(self._tutor_overlay, True)
 
             # Connect close signal
             self._tutor_overlay.closed.connect(self._on_tutor_overlay_closed)
             self._tutor_overlay.stats_requested.connect(self._open_tutor_stats)
             self._tutor_overlay.course_changed.connect(self._on_tutor_course_changed)
-
-            self._tutor_overlay.show()
             user_name = self._tutor_user.name if self._tutor_user else "Unknown"
-            self._debug_panel.log(f"Tutor overlay opened for user: {user_name}")
-
-            # Hide main window
-            self.hide()
+            self._show_auxiliary_window(
+                self._tutor_overlay,
+                f"Tutor overlay opened for user: {user_name}",
+            )
         else:
-            self._tutor_overlay.raise_()
-            self._tutor_overlay.activateWindow()
+            self._focus_auxiliary_window(self._tutor_overlay)
 
     def _on_tutor_course_changed(self, course_id: str) -> None:
         """Persist the selected tutor course and sync related windows."""
@@ -836,18 +793,14 @@ class MainWindow(QMainWindow):
             )
             self._tutor_stats_window.set_overlay_mode(overlay_mode)
             self._tutor_stats_window.set_current_course(self._tutor_course_id)
-            self._tutor_stats_window.show()
-            self._tutor_stats_window.raise_()
-            self._tutor_stats_window.activateWindow()
+            self._show_and_focus_window(self._tutor_stats_window)
             self._debug_panel.log("Tutor statistics opened")
         else:
             self._tutor_stats_window.setParent(stats_parent)
             self._tutor_stats_window.set_overlay_mode(overlay_mode)
             self._tutor_stats_window.set_current_course(self._tutor_course_id)
             self._tutor_stats_window.refresh()
-            self._tutor_stats_window.show()
-            self._tutor_stats_window.raise_()
-            self._tutor_stats_window.activateWindow()
+            self._show_and_focus_window(self._tutor_stats_window)
 
     def _open_about_dialog(self) -> None:
         """Show an About dialog with the keyboard photo."""
@@ -1759,6 +1712,47 @@ class MainWindow(QMainWindow):
         """Apply shared style/runtime state to a newly created auxiliary keyboard widget."""
         self._apply_colors()
         self._apply_keyboard_widget_runtime_state(widget)
+
+    def _initialize_auxiliary_window_base(self, window) -> None:
+        """Apply shared layout/keymap/view-state setup to a new overlay-style window."""
+        if self._layout:
+            window.set_layout(self._layout)
+        if self._keymap:
+            window.set_keymap(self._keymap)
+            window.set_layer(self._get_displayed_layer())
+        window.set_keyboard_view_state(
+            self._keyboard_widget.size(),
+            self._keyboard_widget.transform(),
+        )
+
+    def _apply_auxiliary_os_layout_state(self, window, enabled: bool) -> None:
+        """Apply current OS layout tracking state to an auxiliary window."""
+        self._current_layout_hkl = self._layout_detector.get_current_layout()
+        window.set_os_layout_mode(
+            enabled,
+            self._layout_detector if enabled else None,
+            self._current_layout_hkl if enabled else None,
+        )
+        window.set_caps_lock_mode(self._caps_lock_on)
+
+    def _show_auxiliary_window(self, window, opened_message: str) -> None:
+        """Show a newly created auxiliary window and hide the main window."""
+        if not self._layout_check_timer.isActive():
+            self._layout_check_timer.start()
+        window.show()
+        self._debug_panel.log(opened_message)
+        self.hide()
+
+    def _focus_auxiliary_window(self, window) -> None:
+        """Raise and activate an already open auxiliary window."""
+        window.raise_()
+        window.activateWindow()
+
+    def _show_and_focus_window(self, window) -> None:
+        """Show a window and bring it to the foreground."""
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
     def _apply_hid_settings(self) -> None:
         """Apply saved HID highlight settings to the connected HID controller."""
