@@ -46,20 +46,6 @@ Field simulator:
 python field_sim.py
 ```
 
-## Local Environment Note
-
-For this project on this machine, use the `keyboard-visualizer` Conda environment:
-
-```bash
-C:\Users\VovkVV\.conda\envs\keyboard-visualizer\python.exe visualizer.py
-```
-
-For quick file checks:
-
-```bash
-C:\Users\VovkVV\.conda\envs\keyboard-visualizer\python.exe -m py_compile keyboard_visualizer\ui\tutor_overlay.py
-```
-
 ## Typical Files
 
 Current local examples in `data/`:
