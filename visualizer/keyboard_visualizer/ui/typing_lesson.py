@@ -51,9 +51,10 @@ class TypingStats:
     @property
     def accuracy(self) -> float:
         """Calculate accuracy percentage."""
-        if self.total_chars == 0:
+        attempts = self.correct_chars + self.error_chars
+        if attempts == 0:
             return 100.0
-        return (self.correct_chars / self.total_chars) * 100
+        return (self.correct_chars / attempts) * 100
 
     @property
     def correct_wpm(self) -> float:
@@ -632,7 +633,11 @@ class RichTypingTextWidget(QTextBrowser):
         current_index = self._clamp_index(self._snapshot_current_pos)
         current_row = current_index // columns
         previous_index = current_index if previous_pos is None else self._clamp_index(previous_pos)
-        touched = {current_index, previous_index}
+        reset_like_update = previous_pos is not None and current_index < previous_index
+        if reset_like_update and not rebuild_needed:
+            touched = set(self._cell_map.keys())
+        else:
+            touched = {current_index, previous_index}
 
         update_started_at = time.perf_counter()
         edit_cursor = QTextCursor(self.document())

@@ -268,6 +268,7 @@ class TutorOverlayWindow(QWidget):
         self._lesson_state.lesson_complete.connect(self._on_lesson_complete)
         self._lesson_state.state_changed.connect(self._sync_text_views)
         self._lesson_tree.itemSelectionChanged.connect(self._on_lesson_selection_changed)
+        self._lesson_tree.itemClicked.connect(self._on_lesson_item_clicked)
         self._course_combo.currentIndexChanged.connect(self._on_course_combo_changed)
         self._stats_refresh_timer = QTimer(self)
         self._stats_refresh_timer.setInterval(200)
@@ -540,6 +541,14 @@ class TutorOverlayWindow(QWidget):
         items = self._lesson_tree.selectedItems()
         if items:
             self._load_lesson_from_item(items[0])
+
+    def _on_lesson_item_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
+        """Allow reloading the already selected lesson to restart it visually."""
+        lesson = item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(lesson, TutorLesson) or not lesson.playable:
+            return
+        if self._current_lesson is not None and lesson.lesson_id == self._current_lesson.lesson_id:
+            self._load_lesson_from_item(item)
 
     def _on_course_combo_changed(self) -> None:
         """Reload tutor content when the selected course changes."""
