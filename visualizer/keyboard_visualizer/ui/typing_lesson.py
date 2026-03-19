@@ -20,7 +20,7 @@ from PySide6.QtGui import (
     QTextTableFormat,
     QTextTableCellFormat,
 )
-from PySide6.QtCore import Qt, Signal, QRect, QTimer, QObject
+from PySide6.QtCore import Qt, Signal, QRect, QObject
 
 
 class ErrorMode(Enum):
@@ -591,10 +591,6 @@ class RichTypingTextWidget(QTextBrowser):
         self.setFont(font)
         self.setMinimumHeight(150)
         self.setMaximumHeight(170)
-        self._cursor_timer = QTimer(self)
-        self._cursor_timer.setInterval(500)
-        self._cursor_timer.timeout.connect(self._toggle_cursor)
-        self._cursor_timer.start()
 
     def sync_from_snapshot(self, text: str, char_states: list[CharState], current_pos: int) -> None:
         """Render a lesson snapshot using wrapped rich text."""
@@ -615,13 +611,6 @@ class RichTypingTextWidget(QTextBrowser):
         super().resizeEvent(event)
         self._layout_key = None
         self._sync_document()
-
-    def _toggle_cursor(self) -> None:
-        """Blink the current-character cursor."""
-        self._cursor_visible = not self._cursor_visible
-        current_index = self._clamp_index(self._snapshot_current_pos)
-        if current_index in self._cell_map:
-            self._render_index(current_index)
 
     def _sync_document(self, previous_pos: int | None = None) -> None:
         """Update the rich document, rebuilding only when layout changes."""
