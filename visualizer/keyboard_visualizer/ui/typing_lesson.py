@@ -8,7 +8,18 @@ import time
 from html import escape
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QProgressBar, QTextBrowser
-from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QTextCursor, QTextDocument
+from PySide6.QtGui import (
+    QFont,
+    QColor,
+    QPainter,
+    QFontMetrics,
+    QTextCursor,
+    QTextDocument,
+    QTextCharFormat,
+    QTextBlockFormat,
+    QTextTableFormat,
+    QTextTableCellFormat,
+)
 from PySide6.QtCore import Qt, Signal, QRect, QTimer, QObject
 
 
@@ -552,6 +563,12 @@ class RichTypingTextWidget(QTextBrowser):
         self._debug_log_callback: Optional[Callable[[str], None]] = None
         self._last_layout_log_signature: tuple[int, int, int, int] | None = None
         self._cursor_visible = True
+        self._cached_columns_key: tuple[int, str] | None = None
+        self._cached_columns = 1
+        self._layout_key: tuple[int, int, str] | None = None
+        self._cell_map: dict[int, tuple[object, int]] = {}
+        self._last_rendered_pos = 0
+        self._last_rendered_row = 0
         self.setReadOnly(True)
         self.setOpenLinks(False)
         self.setOpenExternalLinks(False)
@@ -581,12 +598,13 @@ class RichTypingTextWidget(QTextBrowser):
 
     def sync_from_snapshot(self, text: str, char_states: list[CharState], current_pos: int) -> None:
         """Render a lesson snapshot using wrapped rich text."""
+        previous_pos = self._snapshot_current_pos
         self._snapshot_text = text
         self._snapshot_states = char_states
         if current_pos != self._snapshot_current_pos:
             self._cursor_visible = True
         self._snapshot_current_pos = current_pos
-        self._rebuild_html()
+        self._sync_document(previous_pos)
 
     def set_debug_log_callback(self, callback: Optional[Callable[[str], None]]) -> None:
         """Set optional debug logger for layout diagnostics."""
@@ -595,60 +613,87 @@ class RichTypingTextWidget(QTextBrowser):
     def resizeEvent(self, event) -> None:
         """Reflow character blocks on resize."""
         super().resizeEvent(event)
-        self._rebuild_html()
+        self._layout_key = None
+        self._sync_document()
 
     def _toggle_cursor(self) -> None:
         """Blink the current-character cursor."""
         self._cursor_visible = not self._cursor_visible
-        self._rebuild_html()
+        current_index = self._clamp_index(self._snapshot_current_pos)
+        if current_index in self._cell_map:
+            self._render_index(current_index)
 
-    def _rebuild_html(self) -> None:
-        """Rebuild wrapped HTML from the latest snapshot."""
+    def _sync_document(self, previous_pos: int | None = None) -> None:
+        """Update the rich document, rebuilding only when layout changes."""
         states = self._snapshot_states
         if not states:
             self.clear()
+            self._cell_map.clear()
+            self._layout_key = None
             return
 
         available_width = max(1, self.viewport().width() - 16)
-        columns = self._fit_columns(states, available_width)
+        columns = self._get_columns(states, available_width)
+        layout_key = (available_width, columns, self._snapshot_text)
 
-        rows: list[list[tuple[int, CharState]]] = []
-        for start in range(0, len(states), columns):
-            chunk = [(index, states[index]) for index in range(start, min(len(states), start + columns))]
-            rows.append(chunk)
+        rebuild_needed = self._layout_key != layout_key or not self._cell_map
+        if rebuild_needed:
+            self._rebuild_document(columns, available_width)
 
-        current_index = min(max(self._snapshot_current_pos, 0), max(0, len(states) - 1))
+        current_index = self._clamp_index(self._snapshot_current_pos)
         current_row = current_index // columns
         signature = (
             available_width,
             columns,
-            len(rows),
+            (len(states) + columns - 1) // columns,
             current_row,
         )
         if self._debug_log_callback is not None and signature != self._last_layout_log_signature:
             self._last_layout_log_signature = signature
             self._debug_log_callback(
                 "RichTypingTextWidget layout: "
-                f"available_width={available_width} columns={columns} rows={len(rows)} "
+                f"available_width={available_width} columns={columns} rows={(len(states) + columns - 1) // columns} "
                 f"current_pos={self._snapshot_current_pos} current_row={current_row}"
             )
 
-        html_parts: list[str] = [
-            "<div style='font-family: Consolas, monospace; font-size: 24pt; font-weight: 700;'>"
-        ]
-        for row in rows:
-            html_parts.append(self._build_row_table_html(row))
-        html_parts.append("</div>")
-        self.setHtml("".join(html_parts))
-        cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.Start)
-        self.setTextCursor(cursor)
-        self.scrollToAnchor("current-char")
+        previous_index = current_index if previous_pos is None else self._clamp_index(previous_pos)
+        touched = {current_index, previous_index}
+        for index in touched:
+            if index in self._cell_map:
+                self._render_index(index)
 
-    @staticmethod
-    def _wrap_cell_span(char_html: str, style: str) -> str:
-        """Wrap one expected character with the desired style."""
-        return f"<span style='{style}'>{char_html}</span>"
+        if rebuild_needed or current_row != self._last_rendered_row:
+            self._scroll_to_index(current_index)
+
+        self._last_rendered_pos = current_index
+        self._last_rendered_row = current_row
+
+    def _rebuild_document(self, columns: int, available_width: int) -> None:
+        """Build the table-based document for the current lesson layout."""
+        self._cell_map.clear()
+        document = self.document()
+        document.clear()
+        document.setDocumentMargin(6)
+        cursor = QTextCursor(document)
+
+        table_format = QTextTableFormat()
+        table_format.setBorder(0)
+        table_format.setCellPadding(0)
+        table_format.setCellSpacing(0)
+        table_format.setMargin(0)
+
+        states = self._snapshot_states
+        for start in range(0, len(states), columns):
+            row_states = [(index, states[index]) for index in range(start, min(len(states), start + columns))]
+            table = cursor.insertTable(3, len(row_states), table_format)
+            for col, (index, _) in enumerate(row_states):
+                self._cell_map[index] = (table, col)
+                self._render_index(index)
+            cursor = QTextCursor(document)
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            cursor.insertBlock()
+
+        self._layout_key = (available_width, columns, self._snapshot_text)
 
     def _fit_columns(self, states: list[CharState], available_width: int) -> int:
         """Fit the number of columns by measuring actual rendered width."""
@@ -660,25 +705,56 @@ class RichTypingTextWidget(QTextBrowser):
         while low <= high:
             mid = (low + high) // 2
             sample_row = [(index, states[index]) for index in range(min(len(states), mid))]
-            row_html = (
-                "<div style='font-family: Consolas, monospace; font-size: 24pt; font-weight: 700;'>"
-                f"{self._build_row_table_html(sample_row)}"
-                "</div>"
-            )
-            if self._measure_html_width(row_html) <= available_width:
+            if self._measure_table_width(sample_row) <= available_width:
                 best = mid
                 low = mid + 1
             else:
                 high = mid - 1
         return max(1, best)
 
-    def _measure_html_width(self, html: str) -> float:
-        """Measure rendered document width for a candidate row."""
+    def _measure_table_width(self, row: list[tuple[int, CharState]]) -> float:
+        """Measure rendered width for a candidate row using the same table layout."""
         document = QTextDocument()
         document.setDefaultFont(self.font())
         document.setDocumentMargin(6)
-        document.setHtml(html)
+        cursor = QTextCursor(document)
+        table_format = QTextTableFormat()
+        table_format.setBorder(0)
+        table_format.setCellPadding(0)
+        table_format.setCellSpacing(0)
+        table_format.setMargin(0)
+        table = cursor.insertTable(3, len(row), table_format)
+        for col, (_, state) in enumerate(row):
+            char_cell = table.cellAt(0, col)
+            char_format = QTextCharFormat()
+            char_format.setFont(self.font())
+            self._set_cell_content(char_cell, self._display_char(state.char), char_format, None)
+
+            cursor_cell = table.cellAt(1, col)
+            cursor_format = QTextCharFormat()
+            cursor_font = QFont(self.font())
+            cursor_font.setPointSize(1)
+            cursor_format.setFont(cursor_font)
+            cursor_format.setForeground(QColor(Qt.GlobalColor.transparent))
+            self._set_cursor_cell(cursor_cell, False, cursor_format)
+
+            wrong_cell = table.cellAt(2, col)
+            wrong_format = QTextCharFormat()
+            wrong_font = QFont(self.font())
+            wrong_font.setBold(False)
+            wrong_font.setPointSize(14)
+            wrong_format.setFont(wrong_font)
+            wrong_format.setForeground(QColor("#F44336"))
+            self._set_cell_content(wrong_cell, "\u00A0", wrong_format, None)
         return document.size().width()
+
+    def _get_columns(self, states: list[CharState], available_width: int) -> int:
+        """Reuse fitted column count until width or lesson text changes."""
+        cache_key = (available_width, self._snapshot_text)
+        if self._cached_columns_key != cache_key:
+            self._cached_columns = self._fit_columns(states, available_width)
+            self._cached_columns_key = cache_key
+        return self._cached_columns
 
     def _build_row_table_html(self, row: list[tuple[int, CharState]]) -> str:
         """Build a two-row HTML table for one wrapped line."""
@@ -693,31 +769,129 @@ class RichTypingTextWidget(QTextBrowser):
                 style = "color:#000000; background-color:#FFEB3B;"
             elif state.typed:
                 style = "color:#4CAF50;" if state.correct else "color:#F44336;"
-            anchor = "<a name='current-char'></a>" if index == self._snapshot_current_pos else ""
             html_parts.append(
                 "<td style='text-align:center; vertical-align:bottom; padding:0 2px 0 2px;'>"
-                f"{anchor}{self._wrap_cell_span(char_html, style)}</td>"
-            )
-        html_parts.append("</tr><tr>")
-        for index, _ in row:
-            is_current_cursor = index == self._snapshot_current_pos and self._cursor_visible
-            html_parts.append(
-                "<td style='text-align:center; vertical-align:top; padding:0 2px 0 2px; "
-                f"border-top: 3px solid {'#40c4ff' if is_current_cursor else 'transparent'};"
-                "font-size:1pt; line-height:0.2; height:4px;'>&nbsp;</td>"
-            )
-        html_parts.append("</tr><tr>")
-        for _, state in row:
-            wrong_html = "&nbsp;"
-            if state.typed_char and state.typed_char != state.char and not state.correct:
-                wrong_html = "&nbsp;" if state.typed_char == " " else escape(state.typed_char)
-            html_parts.append(
-                "<td style='text-align:center; vertical-align:top; padding:0 2px 0 2px; "
-                "color:#F44336; font-size:14pt; font-weight:400;'>"
-                f"{wrong_html}</td>"
+                f"<span style='{style}'>{char_html}</span></td>"
             )
         html_parts.append("</tr></table>")
         return "".join(html_parts)
+
+    def _render_index(self, index: int) -> None:
+        """Update all three cells for a single character index."""
+        table, col = self._cell_map[index]
+        state = self._snapshot_states[index]
+        is_current = index == self._snapshot_current_pos
+
+        char_format = QTextCharFormat()
+        char_format.setFont(self.font())
+        if is_current:
+            char_format.setForeground(QColor("#000000"))
+            char_format.setBackground(QColor("#FFEB3B"))
+        elif state.typed:
+            char_format.setForeground(QColor("#4CAF50") if state.correct else QColor("#F44336"))
+            char_format.setBackground(QColor(Qt.GlobalColor.transparent))
+        else:
+            char_format.setForeground(QColor("#888888"))
+            char_format.setBackground(QColor(Qt.GlobalColor.transparent))
+
+        wrong_format = QTextCharFormat()
+        wrong_font = QFont(self.font())
+        wrong_font.setBold(False)
+        wrong_font.setPointSize(14)
+        wrong_format.setFont(wrong_font)
+        wrong_format.setForeground(QColor("#F44336"))
+
+        cursor_format = QTextCharFormat()
+        cursor_font = QFont(self.font())
+        cursor_font.setPointSize(1)
+        cursor_format.setFont(cursor_font)
+        cursor_format.setForeground(QColor(Qt.GlobalColor.transparent))
+
+        self._set_cell_content(table.cellAt(0, col), self._display_char(state.char), char_format, "#FFEB3B" if is_current else None)
+        self._set_cursor_cell(table.cellAt(1, col), is_current and self._cursor_visible, cursor_format)
+
+        wrong_char = "\u00A0"
+        if state.typed_char and state.typed_char != state.char and not state.correct:
+            wrong_char = self._display_char(state.typed_char)
+        self._set_cell_content(table.cellAt(2, col), wrong_char, wrong_format, None)
+
+    def _set_cursor_cell(self, cell, visible: bool, char_format: QTextCharFormat) -> None:
+        """Render the cursor underline row for a single cell."""
+        cell_format = QTextTableCellFormat()
+        cell_format.setPadding(0)
+        cell_format.setTopPadding(0)
+        cell_format.setBottomPadding(0)
+        cell_format.setLeftPadding(2)
+        cell_format.setRightPadding(2)
+        cell_format.setBorder(0)
+        cell_format.setTopBorder(3)
+        cell_format.setTopBorderBrush(QColor("#40c4ff") if visible else QColor(Qt.GlobalColor.transparent))
+        cell.setFormat(cell_format)
+        self._replace_cell_text(cell, "\u00A0", char_format, line_height=10, bottom_margin=0)
+
+    def _set_cell_content(
+        self,
+        cell,
+        text: str,
+        char_format: QTextCharFormat,
+        background: str | None,
+    ) -> None:
+        """Render one table cell with aligned text."""
+        cell_format = QTextTableCellFormat()
+        cell_format.setPadding(0)
+        cell_format.setTopPadding(0)
+        cell_format.setBottomPadding(0)
+        cell_format.setLeftPadding(2)
+        cell_format.setRightPadding(2)
+        cell_format.setBorder(0)
+        if background:
+            cell_format.setBackground(QColor(background))
+        else:
+            cell_format.setBackground(QColor(Qt.GlobalColor.transparent))
+        cell.setFormat(cell_format)
+        self._replace_cell_text(cell, text, char_format)
+
+    def _replace_cell_text(
+        self,
+        cell,
+        text: str,
+        char_format: QTextCharFormat,
+        *,
+        line_height: int | None = None,
+        bottom_margin: int = 0,
+    ) -> None:
+        """Replace a cell's text while keeping block alignment stable."""
+        cursor = cell.firstCursorPosition()
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+        cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+
+        block_format = QTextBlockFormat()
+        block_format.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        block_format.setTopMargin(0)
+        block_format.setBottomMargin(bottom_margin)
+        if line_height is not None:
+            block_format.setLineHeight(float(line_height), QTextBlockFormat.LineHeightTypes.FixedHeight.value)
+        cursor.mergeBlockFormat(block_format)
+        cursor.insertText(text, char_format)
+
+    def _scroll_to_index(self, index: int) -> None:
+        """Scroll the current cell into view after a row change."""
+        table, col = self._cell_map[index]
+        cursor = table.cellAt(0, col).firstCursorPosition()
+        self.setTextCursor(cursor)
+        self.ensureCursorVisible()
+
+    def _clamp_index(self, index: int) -> int:
+        """Clamp an index into the current snapshot range."""
+        if not self._snapshot_states:
+            return 0
+        return min(max(index, 0), len(self._snapshot_states) - 1)
+
+    @staticmethod
+    def _display_char(char: str) -> str:
+        """Display spaces as non-breaking spaces so cells keep width."""
+        return "\u00A0" if char == " " else char
 
 
 class TypingStatsWidget(QWidget):
