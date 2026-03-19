@@ -631,12 +631,16 @@ class RichTypingTextWidget(QTextBrowser):
 
         current_index = self._clamp_index(self._snapshot_current_pos)
         current_row = current_index // columns
-
         previous_index = current_index if previous_pos is None else self._clamp_index(previous_pos)
         touched = {current_index, previous_index}
+
+        update_started_at = time.perf_counter()
+        edit_cursor = QTextCursor(self.document())
+        edit_cursor.beginEditBlock()
         for index in touched:
             if index in self._cell_map:
                 self._render_index(index)
+        edit_cursor.endEditBlock()
 
         if rebuild_needed or current_row != self._last_rendered_row:
             self._scroll_to_index(current_index)
