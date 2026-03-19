@@ -54,6 +54,7 @@ class LessonProgressState:
     """Compact lesson progress state for sidebar rendering."""
 
     attempts: int = 0
+    completed_attempts: int = 0
     completed: bool = False
     average_accuracy: float = 0.0
     average_correct_wpm: float = 0.0
@@ -562,6 +563,7 @@ class TutorStatsDatabase:
             SELECT
                 lesson_id,
                 COUNT(*) AS attempts,
+                COALESCE(SUM(completed), 0) AS completed_attempts,
                 COALESCE(MAX(completed), 0) AS completed,
                 COALESCE(AVG(accuracy), 0) AS average_accuracy,
                 COALESCE(AVG(correct_wpm), 0) AS average_correct_wpm
@@ -578,6 +580,7 @@ class TutorStatsDatabase:
         return {
             int(row["lesson_id"]): LessonProgressState(
                 attempts=int(row["attempts"]),
+                completed_attempts=int(row["completed_attempts"]),
                 completed=bool(row["completed"]),
                 average_accuracy=float(row["average_accuracy"]),
                 average_correct_wpm=float(row["average_correct_wpm"]),

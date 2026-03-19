@@ -794,6 +794,8 @@ class TutorOverlayWindow(QWidget):
                     marker = "✓ "
                     color = self._color_for_accuracy(state.average_accuracy)
                     suffix = self._format_lesson_metrics_suffix(
+                        state.attempts,
+                        state.completed_attempts,
                         state.average_accuracy,
                         state.average_correct_wpm,
                     )
@@ -801,6 +803,8 @@ class TutorOverlayWindow(QWidget):
                     marker = "• "
                     color = self._color_for_accuracy(state.average_accuracy)
                     suffix = self._format_lesson_metrics_suffix(
+                        state.attempts,
+                        state.completed_attempts,
                         state.average_accuracy,
                         state.average_correct_wpm,
                     )
@@ -820,9 +824,16 @@ class TutorOverlayWindow(QWidget):
         return QColor("#e57373")
 
     @staticmethod
-    def _format_lesson_metrics_suffix(average_accuracy: float, correct_wpm: float) -> str:
-        """Format accuracy and speed as a compact suffix for the lesson tree."""
+    def _format_lesson_metrics_suffix(
+        attempts: int,
+        completed_attempts: int,
+        average_accuracy: float,
+        correct_wpm: float,
+    ) -> str:
+        """Format attempts, completed attempts, accuracy, and speed for the lesson tree."""
         parts: list[str] = []
+        if attempts > 0:
+            parts.append(f"{completed_attempts}/{attempts}")
         if average_accuracy > 0:
             parts.append(f"{int(round(average_accuracy))}%")
         if correct_wpm > 0:
