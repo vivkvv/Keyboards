@@ -1,5 +1,6 @@
 """Main application window."""
 
+import json
 from pathlib import Path
 import re
 
@@ -40,6 +41,7 @@ from ..input import WindowsHookBackend, ScancodeMapper, KeyboardLayoutDetector, 
 if HID_AVAILABLE:
     from ..input import (
         KeyboardHID,
+        KeyboardDevice,
         VendorKeyEventType,
         get_keyboard_hid,
     )
@@ -61,6 +63,10 @@ BASTARDKB_LAYER_NAMES = {
     5: "Numeral",
     6: "Symbols",
 }
+
+KEYMAP_SOURCE_FILE = "file"
+KEYMAP_SOURCE_DEVICE = "device"
+NO_DEVICE_ID = "__no_device__"
 
 
 class MainWindow(QMainWindow):
@@ -110,6 +116,7 @@ class MainWindow(QMainWindow):
         self._invalid_recent_layouts: set[str] = set()
         self._warning_recent_keymaps: set[str] = set()
         self._warning_recent_layouts: set[str] = set()
+        self._keyboard_definitions = self._load_keyboard_definitions()
 
         # Tutor overlay window (created on demand)
         self._tutor_overlay: TutorOverlayWindow | None = None
@@ -121,6 +128,10 @@ class MainWindow(QMainWindow):
         self._hid_click_enabled = False
         self._last_polled_layer: int | None = None
         self._last_hid_key_event_counter: int | None = None
+        self._available_hid_devices: list["KeyboardDevice"] = []
+        self._selected_hid_device_id = ""
+        self._keymap_source = KEYMAP_SOURCE_FILE
+        self._suppress_keyboard_device_dialog = False
 
         # Parsers
         self._keymap_parser = KeymapParser()
@@ -128,6 +139,8 @@ class MainWindow(QMainWindow):
 
         # Configuration
         self._config = Config()
+        self._selected_hid_device_id = self._config.get_selected_hid_device_id()
+        self._keymap_source = self._config.get_keymap_source()
         self._tutor_course_id = self._config.get_last_tutor_course_id()
         self._invalid_recent_keymaps = self._config.get_invalid_recent_keymaps()
         self._invalid_recent_layouts = self._config.get_invalid_recent_layouts()
@@ -193,6 +206,13 @@ class MainWindow(QMainWindow):
 
         # Toolbar
         self._setup_toolbar()
+        self._refresh_keyboard_device_list()
+        source_index = self._keymap_source_combo.findData(self._keymap_source)
+        if source_index < 0:
+            source_index = 0
+            self._keymap_source = KEYMAP_SOURCE_FILE
+        self._keymap_source_combo.setCurrentIndex(source_index)
+        self._set_keymap_source_status()
 
         # Log startup
         self._debug_panel.log("Application started")
@@ -324,6 +344,33 @@ class MainWindow(QMainWindow):
 
         toolbar_top.addSeparator()
 
+        toolbar_top.addWidget(QLabel("Keyboard:"))
+        self._keyboard_device_combo = QComboBox()
+        self._keyboard_device_combo.setMinimumWidth(180)
+        toolbar_top.addWidget(self._keyboard_device_combo)
+
+        self._keyboard_info_btn = self._make_toolbar_button(
+            "",
+            QStyle.StandardPixmap.SP_FileDialogInfoView,
+            tooltip="Show HID information for selected keyboard",
+        )
+        self._keyboard_info_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self._keyboard_info_btn.setEnabled(False)
+        toolbar_top.addWidget(self._keyboard_info_btn)
+
+        toolbar_top.addWidget(QLabel("Keymap Source:"))
+        self._keymap_source_combo = QComboBox()
+        self._keymap_source_combo.addItem("File", KEYMAP_SOURCE_FILE)
+        self._keymap_source_combo.addItem("Device", KEYMAP_SOURCE_DEVICE)
+        self._keymap_source_combo.setMinimumWidth(110)
+        toolbar_top.addWidget(self._keymap_source_combo)
+
+        self._keymap_source_status = QLabel("")
+        self._keymap_source_status.setMinimumWidth(110)
+        toolbar_top.addWidget(self._keymap_source_status)
+
+        toolbar_top.addSeparator()
+
         toolbar_top.addWidget(QLabel("Layer:"))
         self._layer_combo = QComboBox()
         self._layer_combo.setMinimumWidth(140)
@@ -446,11 +493,14 @@ class MainWindow(QMainWindow):
         self._os_layout_cb.toggled.connect(self._toggle_os_layout)
         # Combo boxes
         self._layer_combo.currentIndexChanged.connect(self._on_layer_view_changed)
+        self._keyboard_device_combo.currentIndexChanged.connect(self._on_keyboard_device_changed)
+        self._keymap_source_combo.currentIndexChanged.connect(self._on_keymap_source_changed)
 
         # Layer view buttons
         self._add_view_btn.clicked.connect(self._add_custom_view)
         self._edit_view_btn.clicked.connect(self._edit_custom_view)
         self._settings_btn.clicked.connect(self._open_settings)
+        self._keyboard_info_btn.clicked.connect(self._show_selected_keyboard_info)
 
         self._keyboard_overlay_btn.clicked.connect(self._open_keyboard_overlay)
         self._tutor_overlay_btn.clicked.connect(self._open_tutor_overlay)
@@ -505,6 +555,223 @@ class MainWindow(QMainWindow):
             self._hid_connect_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self._hid_connect_btn.setStyleSheet("")
 
+    def _device_identity(self, device: "KeyboardDevice") -> str:
+        """Build a stable identifier for persisted device selection."""
+        serial = (device.serial or "").strip()
+        if serial:
+            return f"serial:{serial}"
+        product = (device.product or "").strip()
+        return f"vidpid:{device.vendor_id:04X}:{device.product_id:04X}:{product}"
+
+    def _device_display_name(self, device: "KeyboardDevice") -> str:
+        """Return concise display name for a HID device."""
+        product = (device.product or "").strip() or f"{device.vendor_id:04X}:{device.product_id:04X}"
+        manufacturer = (device.manufacturer or "").strip()
+        if manufacturer and manufacturer.lower() not in product.lower():
+            return f"{product} ({manufacturer})"
+        return product
+
+    def _find_selected_device(self) -> "KeyboardDevice | None":
+        """Return currently selected HID device, if any."""
+        selected_id = self._keyboard_device_combo.currentData() if hasattr(self, "_keyboard_device_combo") else None
+        if not selected_id or selected_id == NO_DEVICE_ID:
+            return None
+        for device in self._available_hid_devices:
+            if self._device_identity(device) == selected_id:
+                return device
+        return None
+
+    def _refresh_keyboard_device_list(self) -> None:
+        """Refresh available HID keyboards and preserve persisted selection when possible."""
+        selected_id = self._selected_hid_device_id or NO_DEVICE_ID
+        self._available_hid_devices = KeyboardHID.list_keyboards() if HID_AVAILABLE else []
+        self._suppress_keyboard_device_dialog = True
+        self._keyboard_device_combo.blockSignals(True)
+        self._keyboard_device_combo.clear()
+        self._keyboard_device_combo.addItem("No device", NO_DEVICE_ID)
+        for device in self._available_hid_devices:
+            self._keyboard_device_combo.addItem(
+                self._device_display_name(device),
+                self._device_identity(device),
+            )
+        index = self._keyboard_device_combo.findData(selected_id)
+        if index < 0:
+            index = 0
+            self._selected_hid_device_id = ""
+        self._keyboard_device_combo.setCurrentIndex(index)
+        self._keyboard_device_combo.blockSignals(False)
+        self._suppress_keyboard_device_dialog = False
+        self._keyboard_info_btn.setEnabled(self._find_selected_device() is not None)
+
+    def _set_keymap_source_status(self) -> None:
+        """Reflect the selected keymap source in the toolbar."""
+        if self._keymap_source == KEYMAP_SOURCE_DEVICE:
+            if self._hid_controller and self._hid_controller.is_connected():
+                text = "Device"
+                color = "#2e7d32"
+            else:
+                text = "Device unavailable"
+                color = "#c62828"
+        else:
+            text = "File"
+            color = "#2e7d32"
+        self._keymap_source_status.setText(text)
+        self._keymap_source_status.setStyleSheet(
+            f"QLabel {{ color: white; background-color: {color}; padding: 4px 8px; border-radius: 4px; font-weight: 600; }}"
+        )
+
+    def _show_keyboard_info_dialog(
+        self,
+        device: "KeyboardDevice",
+        *,
+        protocol_version: int | None = None,
+        dynamic_layer_count: int | None = None,
+    ) -> None:
+        """Show a simple info window for the selected HID keyboard."""
+        definition = self._get_keyboard_definition(device)
+        lines = [
+            "System HID Info",
+            f"Product: {device.product or '-'}",
+            f"Manufacturer: {device.manufacturer or '-'}",
+            f"Serial: {device.serial or '-'}",
+            f"VID:PID: {device.vendor_id:04X}:{device.product_id:04X}",
+            "",
+            "Keyboard Definition",
+        ]
+        if definition is not None:
+            lines.extend(
+                [
+                    f"Definition: {definition.get('name', '-')}",
+                    f"Matrix: {definition.get('matrixRows', '-')} x {definition.get('matrixCols', '-')}",
+                    f"Dynamic Layers: {dynamic_layer_count if dynamic_layer_count is not None else '-'}",
+                    f"Visual Keys: {definition.get('visualKeyCount', '-')}",
+                    f"Geometry ID: {definition.get('geometryId', '-')}",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "Definition: -",
+                    "Matrix: -",
+                    "Dynamic Layers: -",
+                    "Visual Keys: -",
+                    "Geometry ID: -",
+                ]
+            )
+        lines.extend(
+            [
+                "",
+            "Live Protocol Info",
+            ]
+        )
+        if self._hid_controller and self._hid_controller.is_connected():
+            controller_device = self._hid_controller.get_device_info()
+            if controller_device and self._device_identity(controller_device) == self._device_identity(device):
+                lines.append(f"Connected: Yes")
+                lines.append(f"VIA Protocol: 0x{protocol_version:04X}" if protocol_version is not None else "VIA Protocol: -")
+                lines.extend(
+                    [
+                        f"Vendor LED Support: {'Yes' if self._hid_controller.has_vendor_led_support() else 'No'}",
+                        f"Vendor LED Count: {self._hid_controller.get_vendor_led_count() or '-'}",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        "Connected: No",
+                        "VIA Protocol: -",
+                        "Vendor LED Support: -",
+                        "Vendor LED Count: -",
+                    ]
+                )
+        else:
+            lines.extend(
+                [
+                    "Connected: No",
+                    "VIA Protocol: -",
+                    "Vendor LED Support: -",
+                    "Vendor LED Count: -",
+                ]
+            )
+        QMessageBox.information(self, "Keyboard Info", "\n".join(lines))
+
+    def _show_selected_keyboard_info(self) -> None:
+        """Open the info window for the currently selected device."""
+        device = self._find_selected_device()
+        if device is None:
+            QMessageBox.information(self, "Keyboard Info", "No HID keyboard is selected.")
+            return
+        protocol_version = None
+        dynamic_layer_count = None
+        if self._hid_controller and self._hid_controller.is_connected():
+            controller_device = self._hid_controller.get_device_info()
+            if controller_device and self._device_identity(controller_device) == self._device_identity(device):
+                protocol_version = self._hid_controller.get_protocol_version()
+                dynamic_layer_count = self._hid_controller.get_dynamic_keymap_layer_count()
+        self._show_keyboard_info_dialog(
+            device,
+            protocol_version=protocol_version,
+            dynamic_layer_count=dynamic_layer_count,
+        )
+
+    def _on_keyboard_device_changed(self, index: int) -> None:
+        """Persist selected HID device and optionally reconnect if HID is active."""
+        device_id = self._keyboard_device_combo.itemData(index) or NO_DEVICE_ID
+        self._selected_hid_device_id = "" if device_id == NO_DEVICE_ID else str(device_id)
+        self._config.set_selected_hid_device_id(self._selected_hid_device_id)
+        device = self._find_selected_device()
+        self._keyboard_info_btn.setEnabled(device is not None)
+
+        if HID_AVAILABLE and hasattr(self, "_hid_connect_btn") and self._hid_connect_btn.isChecked():
+            self._hid_connect_btn.setChecked(False)
+            if device is not None:
+                self._hid_connect_btn.setChecked(True)
+
+    def _on_keymap_source_changed(self, index: int) -> None:
+        """Persist selected keymap source and update visible status."""
+        source = self._keymap_source_combo.itemData(index) or KEYMAP_SOURCE_FILE
+        self._keymap_source = str(source)
+        self._config.set_keymap_source(self._keymap_source)
+        self._set_keymap_source_status()
+        if self._keymap_source == KEYMAP_SOURCE_DEVICE:
+            self._debug_panel.log("Keymap source selected: Device")
+            self._load_keymap_from_device()
+        else:
+            self._debug_panel.log("Keymap source selected: File")
+            last_keymap = self._config.get_last_keymap()
+            if last_keymap and Path(last_keymap).exists():
+                self._load_keymap_file(last_keymap)
+
+    def _load_keyboard_definitions(self) -> list[dict]:
+        """Load static keyboard definition JSON files from visualizer data directory."""
+        definitions: list[dict] = []
+        data_dir = Path(__file__).resolve().parents[2] / "data"
+        for path in data_dir.glob("*_device.json"):
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(raw, dict):
+                continue
+            definitions.append(raw)
+        return definitions
+
+    def _get_keyboard_definition(self, device: "KeyboardDevice | None") -> dict | None:
+        """Return static keyboard definition for a HID device, if known."""
+        if device is None:
+            return None
+        product = (device.product or "").strip().lower()
+        for definition in self._keyboard_definitions:
+            match_products = definition.get("matchProducts")
+            if isinstance(match_products, list):
+                candidates = [str(item).strip().lower() for item in match_products if str(item).strip()]
+            else:
+                candidate = str(definition.get("matchProduct", "")).strip().lower()
+                candidates = [candidate] if candidate else []
+            if any(candidate and candidate in product for candidate in candidates):
+                return definition
+        return None
+
     def _make_status_icon(self, color: str) -> QIcon:
         """Create a small colored dot icon for menus."""
         pixmap = QPixmap(10, 10)
@@ -557,6 +824,25 @@ class MainWindow(QMainWindow):
 
         action.triggered.connect(lambda checked=False, p=path: loader(p))
 
+    def _apply_loaded_keymap(self, keymap: Keymap, *, source_description: str) -> bool:
+        """Apply a loaded keymap to the whole UI."""
+        if keymap.layer_count <= 0 or keymap.key_count <= 0:
+            raise ValueError(
+                f"Source does not look like a valid keymap: layers={keymap.layer_count}, keys={keymap.key_count}"
+            )
+
+        self._keymap = keymap
+        self._debug_panel.log_success(
+            f"Loaded keymap from {source_description}: {self._keymap.name} "
+            f"({self._keymap.layer_count} layers, {self._keymap.key_count} keys)"
+        )
+
+        self._rebuild_layer_views()
+        self._apply_colors()
+        self._keyboard_widget.set_keymap(self._keymap)
+        self._rebuild_scancode_mapper()
+        return self._validate_data()
+
     def _load_keymap_file(self, file_path: str) -> None:
         """Load a keymap JSON file from path."""
         if not Path(file_path).exists():
@@ -567,41 +853,14 @@ class MainWindow(QMainWindow):
 
         try:
             keymap = self._keymap_parser.parse_file(file_path)
-            if keymap.layer_count <= 0 or keymap.key_count <= 0:
-                raise ValueError(
-                    f"File does not look like a valid keymap: layers={keymap.layer_count}, keys={keymap.key_count}"
-                )
-            self._keymap = keymap
+            has_warning = self._apply_loaded_keymap(keymap, source_description=f"file '{Path(file_path).name}'")
             self._invalid_recent_keymaps.discard(file_path)
             self._config.set_invalid_recent_keymaps(self._invalid_recent_keymaps)
-            self._warning_recent_keymaps.discard(file_path)
-            self._config.set_warning_recent_keymaps(self._warning_recent_keymaps)
-            self._debug_panel.log_success(
-                f"Loaded keymap: {self._keymap.name} "
-                f"({self._keymap.layer_count} layers, {self._keymap.key_count} keys)"
-            )
-
-            # Rebuild layer views
-            self._rebuild_layer_views()
-
-            # Apply colors from config
-            self._apply_colors()
-
-            # Apply to keyboard widget
-            self._keyboard_widget.set_keymap(self._keymap)
-
-            # Rebuild scancode mapper
-            self._rebuild_scancode_mapper()
-
-            # Validate against layout if loaded
-            has_warning = self._validate_data()
             if has_warning:
                 self._warning_recent_keymaps.add(file_path)
             else:
                 self._warning_recent_keymaps.discard(file_path)
             self._config.set_warning_recent_keymaps(self._warning_recent_keymaps)
-
-            # Save to config
             self._config.add_recent_keymap(file_path)
             self._config.set_last_keymap(file_path)
             self._update_recent_menus()
@@ -612,6 +871,30 @@ class MainWindow(QMainWindow):
             self._debug_panel.log_error(f"Failed to load keymap: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load keymap:\n{e}")
             self._update_recent_menus()
+
+    def _load_keymap_from_device(self) -> None:
+        """Load the current dynamic keymap from the connected HID device."""
+        if self._keymap_source != KEYMAP_SOURCE_DEVICE:
+            return
+        if not HID_AVAILABLE or not self._hid_controller or not self._hid_controller.is_connected():
+            self._set_keymap_source_status()
+            return
+
+        device = self._hid_controller.get_device_info()
+        definition = self._get_keyboard_definition(device)
+        if device is None:
+            self._debug_panel.log_error("Cannot load device keymap: no HID device is connected")
+            return
+        if definition is None:
+            self._debug_panel.log_error(f"Cannot load device keymap: no keyboard definition for '{device.product}'")
+            return
+
+        try:
+            keymap = self._hid_controller.read_keymap(definition)
+            self._apply_loaded_keymap(keymap, source_description=f"device '{device.product}'")
+        except Exception as e:
+            self._debug_panel.log_error(f"Failed to load keymap from device: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to load keymap from device:\n{e}")
 
     def _load_layout_file(self, file_path: str) -> None:
         """Load a layout JSON file from path."""
@@ -2047,6 +2330,8 @@ class MainWindow(QMainWindow):
         self._config.set_always_on_top(self._always_on_top_cb.isChecked())
         self._config.set_language_enabled(self._os_layout_cb.isChecked())
         self._config.set_hook_enabled(self._hook_btn.isChecked())
+        self._config.set_keymap_source(self._keymap_source)
+        self._config.set_selected_hid_device_id(self._selected_hid_device_id)
         if HID_AVAILABLE:
             self._config.set_hid_connected(self._hid_connect_btn.isChecked())
             self._config.set_hid_click_enabled(self._hid_click_cb.isChecked())
@@ -2057,10 +2342,20 @@ class MainWindow(QMainWindow):
             return
 
         if checked:
+            self._refresh_keyboard_device_list()
             # Try to connect
             try:
                 self._hid_controller = get_keyboard_hid()
-                if self._hid_controller and self._hid_controller.connect():
+                selected_device = self._find_selected_device()
+                if selected_device is None:
+                    self._debug_panel.log_error("No HID keyboard selected")
+                    self._update_hid_button_state(False)
+                    self._config.set_hid_connected(False)
+                    self._hid_connect_btn.setChecked(False)
+                    self._set_keymap_source_status()
+                    return
+                connect_kwargs = {"path": selected_device.path} if selected_device is not None else {}
+                if self._hid_controller and self._hid_controller.connect(**connect_kwargs):
                     self._apply_hid_settings()
                     self._last_polled_layer = None
                     self._keyboard_widget.set_observed_active_layer(None)
@@ -2083,8 +2378,14 @@ class MainWindow(QMainWindow):
                         self._hid_click_action.setEnabled(True)
                     self._keyboard_widget.set_hid_controller(self._hid_controller)
                     self._config.set_hid_connected(True)
+                    connected_device = self._hid_controller.get_device_info()
+                    if connected_device is not None:
+                        self._selected_hid_device_id = self._device_identity(connected_device)
+                        self._config.set_selected_hid_device_id(self._selected_hid_device_id)
+                        self._refresh_keyboard_device_list()
                     if self._config.get_hid_click_enabled():
                         self._hid_click_cb.setChecked(True)
+                    self._load_keymap_from_device()
                 else:
                     self._debug_panel.log_error("Failed to connect to HID keyboard")
                     self._update_hid_button_state(False)
@@ -2121,6 +2422,8 @@ class MainWindow(QMainWindow):
             self._keyboard_widget.clear_hid_highlights()
             self._debug_panel.log("HID disconnected")
             self._config.set_hid_connected(False)
+            self._refresh_keyboard_device_list()
+        self._set_keymap_source_status()
 
     def _toggle_hid_click(self, checked: bool) -> None:
         """Toggle HID click mode for RGB highlighting."""

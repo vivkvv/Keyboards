@@ -338,6 +338,30 @@ class Config:
         self._config["ui"]["hid_click_enabled"] = str(value).lower()
         self.save()
 
+    def get_selected_hid_device_id(self) -> str:
+        """Get persisted selected HID device identifier."""
+        return self._config.get("ui", "selected_hid_device_id", fallback="") or ""
+
+    def set_selected_hid_device_id(self, value: str | None) -> None:
+        """Persist selected HID device identifier."""
+        self._config["ui"]["selected_hid_device_id"] = (value or "").strip()
+        self.save()
+
+    def get_keymap_source(self) -> str:
+        """Get preferred keymap source."""
+        value = (self._config.get("ui", "keymap_source", fallback="file") or "file").strip().lower()
+        if value not in {"file", "device"}:
+            return "file"
+        return value
+
+    def set_keymap_source(self, value: str) -> None:
+        """Persist preferred keymap source."""
+        normalized = (value or "file").strip().lower()
+        if normalized not in {"file", "device"}:
+            normalized = "file"
+        self._config["ui"]["keymap_source"] = normalized
+        self.save()
+
     def get_tutor_show_hold_labels(self) -> bool:
         """Get whether tutor should show hold labels for LT/MT keys."""
         return self._config.getboolean(

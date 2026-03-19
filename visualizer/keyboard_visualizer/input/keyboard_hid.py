@@ -1,9 +1,11 @@
-"""HID communication with QMK/VIA keyboards for RGB control."""
+"""HID communication with QMK/VIA keyboards for RGB control and keymap reading."""
 
 import time
 import threading
 from typing import Optional
 from dataclasses import dataclass
+
+from ..models import Keymap
 
 try:
     import hid
@@ -26,9 +28,15 @@ class KeyboardDevice:
 # VIA Protocol command IDs
 class ViaCommand:
     GET_PROTOCOL_VERSION = 0x01
+    DYNAMIC_KEYMAP_GET_KEYCODE = 0x04
     LIGHTING_SET_VALUE = 0x07
     LIGHTING_GET_VALUE = 0x08
     LIGHTING_SAVE = 0x09
+    DYNAMIC_KEYMAP_MACRO_GET_COUNT = 0x0C
+    DYNAMIC_KEYMAP_MACRO_GET_BUFFER_SIZE = 0x0D
+    DYNAMIC_KEYMAP_MACRO_GET_BUFFER = 0x0E
+    DYNAMIC_KEYMAP_GET_LAYER_COUNT = 0x11
+    DYNAMIC_KEYMAP_GET_BUFFER = 0x12
     RGBLIGHT_SET_COLOR = 0x05  # For RGBLIGHT
     RGB_MATRIX_SET_COLOR = 0x24  # For RGB Matrix
 
@@ -103,6 +111,171 @@ CHARYBDIS_NANO_KEY_TO_LED = [
 DEFAULT_HIGHLIGHT_COLOR = (255, 0, 0)
 DEFAULT_HIGHLIGHT_DURATION_MS = 1000
 
+_BASIC_KEYCODE_MAP: dict[int, str] = {
+    0x0000: "KC_NO",
+    0x0001: "KC_TRNS",
+    0x0004: "KC_A",
+    0x0005: "KC_B",
+    0x0006: "KC_C",
+    0x0007: "KC_D",
+    0x0008: "KC_E",
+    0x0009: "KC_F",
+    0x000A: "KC_G",
+    0x000B: "KC_H",
+    0x000C: "KC_I",
+    0x000D: "KC_J",
+    0x000E: "KC_K",
+    0x000F: "KC_L",
+    0x0010: "KC_M",
+    0x0011: "KC_N",
+    0x0012: "KC_O",
+    0x0013: "KC_P",
+    0x0014: "KC_Q",
+    0x0015: "KC_R",
+    0x0016: "KC_S",
+    0x0017: "KC_T",
+    0x0018: "KC_U",
+    0x0019: "KC_V",
+    0x001A: "KC_W",
+    0x001B: "KC_X",
+    0x001C: "KC_Y",
+    0x001D: "KC_Z",
+    0x001E: "KC_1",
+    0x001F: "KC_2",
+    0x0020: "KC_3",
+    0x0021: "KC_4",
+    0x0022: "KC_5",
+    0x0023: "KC_6",
+    0x0024: "KC_7",
+    0x0025: "KC_8",
+    0x0026: "KC_9",
+    0x0027: "KC_0",
+    0x0028: "KC_ENT",
+    0x0029: "KC_ESC",
+    0x002A: "KC_BSPC",
+    0x002B: "KC_TAB",
+    0x002C: "KC_SPC",
+    0x002D: "KC_MINS",
+    0x002E: "KC_EQL",
+    0x002F: "KC_LBRC",
+    0x0030: "KC_RBRC",
+    0x0031: "KC_BSLS",
+    0x0033: "KC_SCLN",
+    0x0034: "KC_QUOT",
+    0x0035: "KC_GRV",
+    0x0036: "KC_COMM",
+    0x0037: "KC_DOT",
+    0x0038: "KC_SLSH",
+    0x0039: "KC_CAPS",
+    0x003A: "KC_F1",
+    0x003B: "KC_F2",
+    0x003C: "KC_F3",
+    0x003D: "KC_F4",
+    0x003E: "KC_F5",
+    0x003F: "KC_F6",
+    0x0040: "KC_F7",
+    0x0041: "KC_F8",
+    0x0042: "KC_F9",
+    0x0043: "KC_F10",
+    0x0044: "KC_F11",
+    0x0045: "KC_F12",
+    0x0046: "KC_PSCR",
+    0x0047: "KC_SLCK",
+    0x0048: "KC_PAUS",
+    0x0049: "KC_INS",
+    0x004A: "KC_HOME",
+    0x004B: "KC_PGUP",
+    0x004C: "KC_DEL",
+    0x004D: "KC_END",
+    0x004E: "KC_PGDN",
+    0x004F: "KC_RGHT",
+    0x0050: "KC_LEFT",
+    0x0051: "KC_DOWN",
+    0x0052: "KC_UP",
+    0x00A8: "KC_MUTE",
+    0x00A9: "KC_VOLU",
+    0x00AA: "KC_VOLD",
+    0x00AB: "KC_MNXT",
+    0x00AC: "KC_MPRV",
+    0x00AD: "KC_MSTP",
+    0x00AE: "KC_MPLY",
+    0x00D1: "KC_MS_BTN1",
+    0x00D2: "KC_MS_BTN2",
+    0x00D3: "KC_MS_BTN3",
+    0x00E0: "KC_LCTL",
+    0x00E1: "KC_LSFT",
+    0x00E2: "KC_LALT",
+    0x00E3: "KC_LGUI",
+    0x00E4: "KC_RCTL",
+    0x00E5: "KC_RSFT",
+    0x00E6: "KC_RALT",
+    0x00E7: "KC_RGUI",
+    0x7820: "RGB_TOG",
+    0x7821: "RGB_MOD",
+    0x7822: "RGB_RMOD",
+    0x7C00: "RESET",
+    0x7C01: "RESET",
+    0x7C03: "QK_CLEAR_EEPROM",
+}
+
+_MOD_MASK_TO_NAME: dict[int, str] = {
+    0x01: "MOD_LCTL",
+    0x02: "MOD_LSFT",
+    0x04: "MOD_LALT",
+    0x08: "MOD_LGUI",
+    0x18: "MOD_LGUI | MOD_RGUI",
+    0x11: "MOD_LCTL | MOD_RCTL",
+    0x12: "MOD_LSFT | MOD_RSFT",
+    0x0C: "MOD_LGUI | MOD_RGUI",
+}
+
+
+def _decode_qmk_keycode(keycode: int) -> str:
+    """Decode a raw 16-bit QMK keycode into a VIA-style string."""
+    if keycode in _BASIC_KEYCODE_MAP:
+        return _BASIC_KEYCODE_MAP[keycode]
+
+    if 0x0100 <= keycode <= 0x1FFF:
+        mods = (keycode >> 8) & 0x1F
+        basic = _BASIC_KEYCODE_MAP.get(keycode & 0xFF)
+        if basic is None:
+            return f"0x{keycode:04X}"
+        if mods == 0x02:
+            return f"S({basic})"
+        mod_name = _MOD_MASK_TO_NAME.get(mods, f"0x{mods:02X}")
+        return f"MT({mod_name},{basic})"
+
+    if 0x2000 <= keycode <= 0x3FFF:
+        mods = (keycode >> 8) & 0x1F
+        tap_key = _BASIC_KEYCODE_MAP.get(keycode & 0xFF)
+        mod_name = _MOD_MASK_TO_NAME.get(mods, f"0x{mods:02X}")
+        return f"MT({mod_name},{tap_key or f'0x{keycode & 0xFF:02X}'})"
+
+    if 0x4000 <= keycode <= 0x4FFF:
+        layer = (keycode >> 8) & 0x0F
+        tap_key = _BASIC_KEYCODE_MAP.get(keycode & 0xFF)
+        return f"LT({layer},{tap_key or f'0x{keycode & 0xFF:02X}'})"
+
+    if 0x7E00 <= keycode <= 0x7E3F:
+        return f"CUSTOM({keycode - 0x7E00})"
+
+    if 0x7E40 <= keycode <= 0x7FFF:
+        return f"CUSTOM({keycode - 0x7E00})"
+
+    return f"0x{keycode:04X}"
+
+
+def _parse_macro_buffer(raw: bytes, macro_count: int) -> list[str]:
+    """Decode VIA macro buffer into string slots."""
+    if macro_count <= 0:
+        return []
+
+    chunks = raw.split(b"\x00")
+    macros = [chunk.decode("utf-8", errors="ignore") for chunk in chunks[:macro_count]]
+    if len(macros) < macro_count:
+        macros.extend([""] * (macro_count - len(macros)))
+    return macros[:macro_count]
+
 
 class KeyboardHID:
     """
@@ -150,7 +323,12 @@ class KeyboardHID:
                 ))
         return keyboards
 
-    def connect(self, vendor_id: Optional[int] = None, product_id: Optional[int] = None) -> bool:
+    def connect(
+        self,
+        vendor_id: Optional[int] = None,
+        product_id: Optional[int] = None,
+        path: bytes | None = None,
+    ) -> bool:
         """
         Connect to a keyboard.
 
@@ -166,7 +344,11 @@ class KeyboardHID:
         # Find matching keyboard
         target = None
         for kb in keyboards:
-            if vendor_id and product_id:
+            if path is not None:
+                if kb.path == path:
+                    target = kb
+                    break
+            elif vendor_id and product_id:
                 if kb.vendor_id == vendor_id and kb.product_id == product_id:
                     target = kb
                     break
@@ -228,6 +410,126 @@ class KeyboardHID:
     def get_device_info(self) -> Optional[KeyboardDevice]:
         """Get info about connected device."""
         return self._device_info
+
+    def get_dynamic_keymap_layer_count(self) -> int | None:
+        """Return dynamic layer count reported by the device."""
+        response = self._send_and_receive([ViaCommand.DYNAMIC_KEYMAP_GET_LAYER_COUNT])
+        if response and len(response) >= 2 and response[0] == ViaCommand.DYNAMIC_KEYMAP_GET_LAYER_COUNT:
+            return response[1]
+        return None
+
+    def get_dynamic_keymap_buffer(self, offset: int, size: int) -> bytes | None:
+        """Read a chunk of the device dynamic keymap buffer."""
+        response = self._send_and_receive(
+            [
+                ViaCommand.DYNAMIC_KEYMAP_GET_BUFFER,
+                (offset >> 8) & 0xFF,
+                offset & 0xFF,
+                size & 0xFF,
+            ]
+        )
+        if not response or len(response) < 4 or response[0] != ViaCommand.DYNAMIC_KEYMAP_GET_BUFFER:
+            return None
+        return bytes(response[4:4 + size])
+
+    def get_dynamic_macro_count(self) -> int | None:
+        """Return the number of macro slots."""
+        response = self._send_and_receive([ViaCommand.DYNAMIC_KEYMAP_MACRO_GET_COUNT])
+        if response and len(response) >= 2 and response[0] == ViaCommand.DYNAMIC_KEYMAP_MACRO_GET_COUNT:
+            return response[1]
+        return None
+
+    def get_dynamic_macro_buffer_size(self) -> int | None:
+        """Return the byte size of the dynamic macro buffer."""
+        response = self._send_and_receive([ViaCommand.DYNAMIC_KEYMAP_MACRO_GET_BUFFER_SIZE])
+        if response and len(response) >= 3 and response[0] == ViaCommand.DYNAMIC_KEYMAP_MACRO_GET_BUFFER_SIZE:
+            return (response[1] << 8) | response[2]
+        return None
+
+    def get_dynamic_macro_buffer(self, offset: int, size: int) -> bytes | None:
+        """Read a chunk of the dynamic macro buffer."""
+        response = self._send_and_receive(
+            [
+                ViaCommand.DYNAMIC_KEYMAP_MACRO_GET_BUFFER,
+                (offset >> 8) & 0xFF,
+                offset & 0xFF,
+                size & 0xFF,
+            ]
+        )
+        if not response or len(response) < 4 or response[0] != ViaCommand.DYNAMIC_KEYMAP_MACRO_GET_BUFFER:
+            return None
+        return bytes(response[4:4 + size])
+
+    def read_keymap(self, definition: dict) -> Keymap:
+        """Read the current VIA dynamic keymap from the connected device."""
+        if not self._connected or not self._device_info:
+            raise RuntimeError("HID keyboard is not connected")
+
+        matrix_rows = int(definition.get("matrixRows", 0) or 0)
+        matrix_cols = int(definition.get("matrixCols", 0) or 0)
+        if matrix_rows <= 0 or matrix_cols <= 0:
+            raise ValueError("Keyboard definition is missing matrixRows/matrixCols")
+
+        layer_count = self.get_dynamic_keymap_layer_count()
+        if layer_count is None or layer_count <= 0:
+            raise ValueError("Could not determine dynamic keymap layer count")
+
+        matrix_to_visual = definition.get("matrixToVisual")
+        visual_key_count = int(definition.get("visualKeyCount", matrix_rows * matrix_cols) or 0)
+        if not isinstance(matrix_to_visual, list):
+            matrix_to_visual = [
+                list(range(row * matrix_cols, (row + 1) * matrix_cols))
+                for row in range(matrix_rows)
+            ]
+            visual_key_count = matrix_rows * matrix_cols
+
+        total_keymap_bytes = layer_count * matrix_rows * matrix_cols * 2
+        keymap_raw = bytearray()
+        offset = 0
+        while offset < total_keymap_bytes:
+            chunk_size = min(28, total_keymap_bytes - offset)
+            chunk = self.get_dynamic_keymap_buffer(offset, chunk_size)
+            if chunk is None or len(chunk) != chunk_size:
+                raise RuntimeError(f"Failed to read dynamic keymap buffer at offset {offset}")
+            keymap_raw.extend(chunk)
+            offset += chunk_size
+
+        layers: list[list[str]] = []
+        for layer_index in range(layer_count):
+            layer_keys = ["KC_NO"] * visual_key_count
+            base = layer_index * matrix_rows * matrix_cols * 2
+            for row in range(matrix_rows):
+                row_map = matrix_to_visual[row] if row < len(matrix_to_visual) else []
+                for col in range(matrix_cols):
+                    visual_index = row_map[col] if col < len(row_map) else None
+                    keycode_offset = base + ((row * matrix_cols) + col) * 2
+                    raw_keycode = (keymap_raw[keycode_offset] << 8) | keymap_raw[keycode_offset + 1]
+                    if isinstance(visual_index, int) and 0 <= visual_index < visual_key_count:
+                        layer_keys[visual_index] = _decode_qmk_keycode(raw_keycode)
+            layers.append(layer_keys)
+
+        macro_count = self.get_dynamic_macro_count() or 0
+        macros: list[str] = []
+        macro_buffer_size = self.get_dynamic_macro_buffer_size() or 0
+        if macro_count > 0 and macro_buffer_size > 0:
+            macro_raw = bytearray()
+            offset = 0
+            while offset < macro_buffer_size:
+                chunk_size = min(28, macro_buffer_size - offset)
+                chunk = self.get_dynamic_macro_buffer(offset, chunk_size)
+                if chunk is None or len(chunk) != chunk_size:
+                    raise RuntimeError(f"Failed to read dynamic macro buffer at offset {offset}")
+                macro_raw.extend(chunk)
+                offset += chunk_size
+            macros = _parse_macro_buffer(bytes(macro_raw), macro_count)
+
+        vendor_product_id = (self._device_info.vendor_id << 16) | self._device_info.product_id
+        return Keymap(
+            name=self._device_info.product or definition.get("name", "HID Keyboard"),
+            layers=layers,
+            macros=macros,
+            vendor_product_id=vendor_product_id,
+        )
 
     def _send_raw(self, data: list[int]) -> bool:
         """Send raw HID report."""

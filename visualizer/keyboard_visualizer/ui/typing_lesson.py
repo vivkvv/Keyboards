@@ -9,7 +9,7 @@ from html import escape
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QProgressBar, QTextBrowser
 from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QTextCursor, QTextDocument
-from PySide6.QtCore import Qt, Signal, QRect, QTimer
+from PySide6.QtCore import Qt, Signal, QRect, QTimer, QObject
 
 
 class ErrorMode(Enum):
@@ -68,6 +68,177 @@ class CharState:
     typed_char: Optional[str] = None
     # Which key index should be pressed (for finger hints)
     key_index: Optional[int] = None
+
+
+class TypingLessonState(QObject):
+    """Logic/state holder for a typing lesson, independent from rendering."""
+
+    char_expected = Signal(str, int)
+    lesson_complete = Signal(TypingStats)
+    state_changed = Signal()
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._text = ""
+        self._char_states: list[CharState] = []
+        self._current_pos = 0
+        self._error_mode = ErrorMode.CONTINUE
+        self._stats = TypingStats()
+        self._started_at: Optional[float] = None
+        self._completed_at: Optional[float] = None
+        self._last_attempt_outcome = AttemptOutcome.IGNORED
+        self._char_to_key: Optional[Callable[[str], Optional[int]]] = None
+
+    def set_text(self, text: str) -> None:
+        """Set the text to type."""
+        self._text = text
+        self._char_states = [CharState(char=c) for c in text]
+        self._current_pos = 0
+        self._stats = TypingStats(total_chars=len(text))
+        self._started_at = None
+        self._completed_at = None
+        self._last_attempt_outcome = AttemptOutcome.IGNORED
+        if self._char_to_key:
+            for state in self._char_states:
+                state.key_index = self._char_to_key(state.char)
+        self.state_changed.emit()
+        self._emit_current_char()
+
+    def set_error_mode(self, mode: ErrorMode) -> None:
+        """Set how errors are handled."""
+        self._error_mode = mode
+
+    def set_char_to_key_callback(self, callback: Callable[[str], Optional[int]]) -> None:
+        """Set callback to convert character to key index."""
+        self._char_to_key = callback
+
+    def refresh_key_indices(self) -> None:
+        """Recompute key indices for the current lesson text."""
+        if not self._char_to_key:
+            return
+        for state in self._char_states:
+            state.key_index = self._char_to_key(state.char)
+        self.state_changed.emit()
+        self._emit_current_char()
+
+    def handle_keypress(self, char: str) -> bool:
+        """Handle a typed character."""
+        if self._current_pos >= len(self._char_states):
+            self._last_attempt_outcome = AttemptOutcome.IGNORED
+            return False
+
+        expected = self._char_states[self._current_pos].char
+        is_correct = (char == expected)
+
+        if is_correct:
+            self._last_attempt_outcome = AttemptOutcome.CORRECT
+            self._ensure_started()
+            self._char_states[self._current_pos].typed = True
+            self._char_states[self._current_pos].correct = True
+            self._char_states[self._current_pos].typed_char = None
+            self._stats.correct_chars += 1
+            self._current_pos += 1
+            self._stats.current_position = self._current_pos
+            self.state_changed.emit()
+            self._emit_current_char()
+            if self._current_pos >= len(self._char_states):
+                self._mark_completed()
+                self.lesson_complete.emit(self._stats)
+            return True
+
+        if self._started_at is None:
+            self._last_attempt_outcome = AttemptOutcome.IGNORED
+            return False
+
+        self._last_attempt_outcome = AttemptOutcome.ERROR
+        self._stats.error_chars += 1
+        self._char_states[self._current_pos].correct = False
+        self._char_states[self._current_pos].typed_char = char
+
+        if self._error_mode == ErrorMode.CONTINUE:
+            self._char_states[self._current_pos].typed = True
+            self._current_pos += 1
+            self._stats.current_position = self._current_pos
+            self.state_changed.emit()
+            self._emit_current_char()
+            if self._current_pos >= len(self._char_states):
+                self._mark_completed()
+                self.lesson_complete.emit(self._stats)
+            return True
+
+        self.state_changed.emit()
+        return False
+
+    def get_current_key_index(self) -> Optional[int]:
+        if self._current_pos < len(self._char_states):
+            return self._char_states[self._current_pos].key_index
+        return None
+
+    def get_current_position(self) -> int:
+        return self._current_pos
+
+    def get_expected_char(self) -> Optional[str]:
+        if self._current_pos < len(self._char_states):
+            return self._char_states[self._current_pos].char
+        return None
+
+    def get_stats(self) -> TypingStats:
+        self._refresh_elapsed()
+        return self._stats
+
+    def reset(self) -> None:
+        for state in self._char_states:
+            state.typed = False
+            state.correct = True
+            state.typed_char = None
+        self._current_pos = 0
+        self._stats = TypingStats(total_chars=len(self._char_states))
+        self._started_at = None
+        self._completed_at = None
+        self._last_attempt_outcome = AttemptOutcome.IGNORED
+        self.state_changed.emit()
+        self._emit_current_char()
+
+    def get_last_attempt_outcome(self) -> AttemptOutcome:
+        return self._last_attempt_outcome
+
+    def get_render_snapshot(self) -> tuple[str, list[CharState], int]:
+        copied = [
+            CharState(
+                char=state.char,
+                typed=state.typed,
+                correct=state.correct,
+                typed_char=state.typed_char,
+                key_index=state.key_index,
+            )
+            for state in self._char_states
+        ]
+        return self._text, copied, self._current_pos
+
+    def _emit_current_char(self) -> None:
+        if self._current_pos < len(self._char_states):
+            state = self._char_states[self._current_pos]
+            key_index = state.key_index if state.key_index is not None else -1
+            self.char_expected.emit(state.char, key_index)
+
+    def _ensure_started(self) -> None:
+        if self._started_at is None:
+            self._started_at = time.monotonic()
+            self._stats.started = True
+            self._refresh_elapsed()
+
+    def _mark_completed(self) -> None:
+        if self._completed_at is None:
+            self._completed_at = time.monotonic()
+            self._stats.completed = True
+            self._refresh_elapsed()
+
+    def _refresh_elapsed(self) -> None:
+        if self._started_at is None:
+            self._stats.elapsed_seconds = 0.0
+            return
+        end_time = self._completed_at if self._completed_at is not None else time.monotonic()
+        self._stats.elapsed_seconds = max(0.0, end_time - self._started_at)
 
 
 class TypingTextWidget(QWidget):

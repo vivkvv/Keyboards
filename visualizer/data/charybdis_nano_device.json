@@ -1,0 +1,13 @@
+{
+  "id": "charybdis_nano",
+  "name": "Charybdis Nano",
+  "matchProducts": ["Charybdis Nano (3x5) Splinky", "Charybdis Nano", "Charybdis"],
+  "matrixRows": 8,
+  "matrixCols": 5,
+  "visualKeyCount": 40,
+  "geometryId": "charybdis_nano",
+  "notes": [
+    "Matrix dimensions are used to read VIA dynamic keymap from device in row-major order.",
+    "Geometry remains file-based and is not part of HID discovery."
+  ]
+}

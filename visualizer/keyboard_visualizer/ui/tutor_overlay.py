@@ -20,7 +20,7 @@ from PySide6.QtCore import Qt, QPoint, Signal, QTimer, QEvent
 
 from .keyboard_widget import KeyboardWidget
 from .typing_lesson import (
-    TypingTextWidget,
+    TypingLessonState,
     RichTypingTextWidget,
     TypingStatsWidget,
     TypingStats,
@@ -188,7 +188,7 @@ class TutorOverlayWindow(QWidget):
         self._next_lesson_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._next_lesson_btn.clicked.connect(lambda: self._navigate_lesson(1))
 
-        self._text_widget = TypingTextWidget()
+        self._lesson_state = TypingLessonState(self)
         self._rich_text_widget = RichTypingTextWidget()
         self._rich_text_widget.set_debug_log_callback(self._debug_log)
         self._stats_widget = TypingStatsWidget()
@@ -251,7 +251,6 @@ class TutorOverlayWindow(QWidget):
         lesson_nav_row.addWidget(self._next_lesson_btn)
         lesson_nav_row.addStretch()
         right_layout.addLayout(lesson_nav_row)
-        right_layout.addWidget(self._text_widget)
         right_layout.addWidget(self._rich_text_widget)
         right_layout.addWidget(self._stats_widget)
         right_layout.addWidget(self._keyboard_widget, 1)
@@ -265,8 +264,9 @@ class TutorOverlayWindow(QWidget):
         outer_layout.addLayout(main_layout, 1)
 
         # Connect signals
-        self._text_widget.char_expected.connect(self._on_char_expected)
-        self._text_widget.lesson_complete.connect(self._on_lesson_complete)
+        self._lesson_state.char_expected.connect(self._on_char_expected)
+        self._lesson_state.lesson_complete.connect(self._on_lesson_complete)
+        self._lesson_state.state_changed.connect(self._sync_text_views)
         self._lesson_tree.itemSelectionChanged.connect(self._on_lesson_selection_changed)
         self._course_combo.currentIndexChanged.connect(self._on_course_combo_changed)
         self._stats_refresh_timer = QTimer(self)
@@ -287,7 +287,7 @@ class TutorOverlayWindow(QWidget):
 
     def _sync_text_views(self) -> None:
         """Keep experimental text renderer in sync with the legacy widget."""
-        text, char_states, current_pos = self._text_widget.get_render_snapshot()
+        text, char_states, current_pos = self._lesson_state.get_render_snapshot()
         self._rich_text_widget.sync_from_snapshot(text, char_states, current_pos)
 
     def _debug_log(self, message: str) -> None:
@@ -315,7 +315,7 @@ class TutorOverlayWindow(QWidget):
         self._scancode_mapper = ScancodeMapper(keymap, base_layer=0)
         self._build_char_to_key_map()
         # Update text widget with mapping callback
-        self._text_widget.set_char_to_key_callback(self._get_key_for_char)
+        self._lesson_state.set_char_to_key_callback(self._get_key_for_char)
         self._reload_course()
 
     def set_layer(self, layer_index: int) -> None:
@@ -529,9 +529,8 @@ class TutorOverlayWindow(QWidget):
         parent = item.parent()
         self._section_label.setText(parent.text(0) if parent else "Typing Course")
         self._lesson_label.setText(lesson.title)
-        self._text_widget.set_text(lesson.text)
-        self._sync_text_views()
-        self._stats_widget.update_stats(self._text_widget.get_stats())
+        self._lesson_state.set_text(lesson.text)
+        self._stats_widget.update_stats(self._lesson_state.get_stats())
         self._last_timed_event_at = None
         self._update_lesson_status()
         self._update_navigation_buttons()
@@ -577,9 +576,8 @@ class TutorOverlayWindow(QWidget):
 
     def _refresh_stats(self) -> None:
         """Refresh lesson stats while the overlay is visible."""
-        stats = self._text_widget.get_stats()
+        stats = self._lesson_state.get_stats()
         self._stats_widget.update_stats(stats)
-        self._sync_text_views()
         self._update_lesson_status(stats)
 
     def _update_finger_legend(self, palette: dict[Finger, QColor]) -> None:
@@ -614,18 +612,17 @@ class TutorOverlayWindow(QWidget):
 
     def handle_keypress(self, char: str, key_index: int | None = None) -> bool:
         """Handle a keypress during typing lesson."""
-        expected_char = self._text_widget.get_expected_char() or ""
-        position_index = self._text_widget.get_current_position()
+        expected_char = self._lesson_state.get_expected_char() or ""
+        position_index = self._lesson_state.get_current_position()
         now = time.monotonic()
 
         # Return fingers to neutral before the next expected symbol is emitted.
         self._keyboard_widget.hide_finger_hints()
 
-        result = self._text_widget.handle_keypress(char)
-        outcome = self._text_widget.get_last_attempt_outcome()
-        stats = self._text_widget.get_stats()
-        self._stats_widget.update_stats(self._text_widget.get_stats())
-        self._sync_text_views()
+        result = self._lesson_state.handle_keypress(char)
+        outcome = self._lesson_state.get_last_attempt_outcome()
+        stats = self._lesson_state.get_stats()
+        self._stats_widget.update_stats(stats)
         if key_index is not None:
             if outcome == AttemptOutcome.CORRECT:
                 self._keyboard_widget.show_tutor_key_feedback(key_index, True)
@@ -696,7 +693,7 @@ class TutorOverlayWindow(QWidget):
             self._last_timed_event_at = None
             return
 
-        stats = self._text_widget.get_stats()
+        stats = self._lesson_state.get_stats()
         self._stats_db.finish_attempt(
             self._active_attempt_id,
             total_chars=stats.total_chars,
@@ -712,7 +709,7 @@ class TutorOverlayWindow(QWidget):
 
     def _update_lesson_status(self, stats: TypingStats | None = None) -> None:
         """Refresh the lesson status line."""
-        stats = stats or self._text_widget.get_stats()
+        stats = stats or self._lesson_state.get_stats()
         if stats.completed:
             self._lesson_status_label.setText("Lesson complete")
             self._lesson_status_label.setStyleSheet("color: #66bb6a; font-size: 12px; font-weight: 600;")
@@ -849,8 +846,7 @@ class TutorOverlayWindow(QWidget):
     def set_error_mode(self, mode: ErrorMode) -> None:
         """Set how errors are handled."""
         self._error_mode = mode
-        self._text_widget.set_error_mode(mode)
-        self._sync_text_views()
+        self._lesson_state.set_error_mode(mode)
 
     def set_os_layout_mode(
         self,
@@ -863,18 +859,16 @@ class TutorOverlayWindow(QWidget):
         self._layout_hkl = hkl if enabled else None
         self._keyboard_widget.set_os_layout_mode(enabled, layout_detector, hkl)
         self._build_char_to_key_map()
-        self._text_widget.set_char_to_key_callback(self._get_key_for_char)
-        self._text_widget.refresh_key_indices()
-        self._sync_text_views()
+        self._lesson_state.set_char_to_key_callback(self._get_key_for_char)
+        self._lesson_state.refresh_key_indices()
 
     def set_caps_lock_mode(self, caps_lock_on: bool) -> None:
         """Set Caps Lock mode for displayed key labels."""
         self._caps_lock_on = caps_lock_on
         self._keyboard_widget.set_caps_lock_mode(caps_lock_on)
         self._build_char_to_key_map()
-        self._text_widget.set_char_to_key_callback(self._get_key_for_char)
-        self._text_widget.refresh_key_indices()
-        self._sync_text_views()
+        self._lesson_state.set_char_to_key_callback(self._get_key_for_char)
+        self._lesson_state.refresh_key_indices()
 
     # Dragging support
     def _on_drag_started(self, global_pos: QPoint) -> None:
@@ -985,8 +979,7 @@ class TutorOverlayWindow(QWidget):
     def _reset_lesson(self) -> None:
         """Reset lesson and finish any in-progress attempt as incomplete."""
         self._finalize_current_attempt(False)
-        self._text_widget.reset()
-        self._sync_text_views()
-        self._stats_widget.update_stats(self._text_widget.get_stats())
+        self._lesson_state.reset()
+        self._stats_widget.update_stats(self._lesson_state.get_stats())
         self._keyboard_widget.hide_finger_hints()
         self._update_lesson_status()
