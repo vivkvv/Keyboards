@@ -631,19 +631,6 @@ class RichTypingTextWidget(QTextBrowser):
 
         current_index = self._clamp_index(self._snapshot_current_pos)
         current_row = current_index // columns
-        signature = (
-            available_width,
-            columns,
-            (len(states) + columns - 1) // columns,
-            current_row,
-        )
-        if self._debug_log_callback is not None and signature != self._last_layout_log_signature:
-            self._last_layout_log_signature = signature
-            self._debug_log_callback(
-                "RichTypingTextWidget layout: "
-                f"available_width={available_width} columns={columns} rows={(len(states) + columns - 1) // columns} "
-                f"current_pos={self._snapshot_current_pos} current_row={current_row}"
-            )
 
         previous_index = current_index if previous_pos is None else self._clamp_index(previous_pos)
         touched = {current_index, previous_index}
@@ -664,6 +651,7 @@ class RichTypingTextWidget(QTextBrowser):
         document.clear()
         document.setDocumentMargin(6)
         cursor = QTextCursor(document)
+        cursor.beginEditBlock()
 
         table_format = QTextTableFormat()
         table_format.setBorder(0)
@@ -682,6 +670,7 @@ class RichTypingTextWidget(QTextBrowser):
             cursor.movePosition(QTextCursor.MoveOperation.End)
             cursor.insertBlock()
 
+        cursor.endEditBlock()
         self._layout_key = (available_width, columns, self._snapshot_text)
 
     def _fit_columns(self, states: list[CharState], available_width: int) -> int:
@@ -867,7 +856,7 @@ class RichTypingTextWidget(QTextBrowser):
     def _scroll_to_index(self, index: int) -> None:
         """Scroll the current cell into view after a row change."""
         table, col = self._cell_map[index]
-        cursor = table.cellAt(0, col).firstCursorPosition()
+        cursor = table.cellAt(2, col).firstCursorPosition()
         self.setTextCursor(cursor)
         self.ensureCursorVisible()
 

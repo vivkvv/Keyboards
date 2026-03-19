@@ -515,7 +515,6 @@ class TutorOverlayWindow(QWidget):
         self._refresh_lesson_tree_progress()
         if target_item is not None:
             self._lesson_tree.setCurrentItem(target_item)
-            self._load_lesson_from_item(target_item)
 
     def _load_lesson_from_item(self, item: QTreeWidgetItem) -> None:
         """Load lesson from selected tree item."""
@@ -746,7 +745,6 @@ class TutorOverlayWindow(QWidget):
             target_item = items[target_index]
         if target_item is not current_item:
             self._lesson_tree.setCurrentItem(target_item)
-            self._load_lesson_from_item(target_item)
         self._update_navigation_buttons()
 
     def _update_navigation_buttons(self) -> None:
